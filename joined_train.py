@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument("--unet_size", type=str, default="S", help="size of the model (S, M)")
 
     parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
+    parser.add_argument("--n_epochs_unet", type=int, default=10, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=4, help="size of the batches")
     parser.add_argument("--n_workers", type=int, default=4, help="number of cpu threads to use during batch generation")
     parser.add_argument("--gpu", type=int, default=0, help="gpu to use for training, -1 for cpu")
@@ -48,7 +49,7 @@ def parse_args():
     parser.add_argument("--decay_steps", type=int, default=4, help="number of step decays")
 
     parser.add_argument("--pixel_weight", type=float, default=1, help="weight of the pixelwise loss")
-    parser.add_argument("--perceptual_weight", type=float, default=0.2, help="weight of the perceptual loss")
+    parser.add_argument("--perceptual_weight", type=float, default=0.5, help="weight of the perceptual loss")
 
     parser.add_argument("--valid_checkpoint", type=int, default=1, help="number of epochs between each validation")
     parser.add_argument("--checkpoint_mode", type=str, default="b/l", help="mode for saving checkpoints: b/l (best/last), all (all epochs), n (none)")
@@ -125,15 +126,9 @@ if __name__ == "__main__":
         if opt.resnet_size == 'S':
             resnet = CustomResNet50().to(device)
             resnet.load_state_dict(torch.load(opt.resnet_path))
-            resnet.eval()
-            for param in resnet.parameters():
-                param.requires_grad = False
         else:
             resnet = CustomResNet101().to(device)
             resnet.load_state_dict(torch.load(opt.resnet_path))
-            resnet.eval()
-            for param in resnet.parameters():
-                param.requires_grad = False
     else:
         raise ValueError("No ResNet weiths was provided, specify the path in option --resnet_path ")
     
@@ -149,7 +144,7 @@ if __name__ == "__main__":
     RMSE_ = RMSE()
 
     # Define optimizer for UNet
-    optimizer = torch.optim.Adam(unet.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+    optimizer = torch.optim.Adam(list(resnet.parameters()) + list(unet.parameters()), lr=opt.lr, betas=(opt.b1, opt.b2))
     decay_step = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
     milestones = [opt.decay_epoch + i * opt.decay_steps for i in range((opt.n_epochs - opt.decay_epoch) // opt.decay_steps)]
     scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
@@ -177,11 +172,8 @@ if __name__ == "__main__":
                                                     num_workers=opt.n_workers,
                                                     worker_init_fn=seed_worker,
                                                     generator=g)
-
-    # Init losses and metrics lists
-    #p: for partial -> loss of resnet
-    #g: for global -> loss of unet
     
+    # Init losses and metrics lists    
     train_loss = []
     train_val_loss = []
 
@@ -208,6 +200,15 @@ if __name__ == "__main__":
         train_rmse_epoch_shadow = 0
 
         unet = unet.train()
+        resnet = resnet.train()
+
+        if epoch < opt.n_epochs_unet + 1:
+            for param in resnet.parameters():
+                param.requires_grad = False
+        else:
+            for param in resnet.parameters():
+                param.requires_grad = True
+
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"UNet Training Epoch {epoch}/{opt.n_epochs}")
         for i, data in enumerate(train_loader):
             shadow = data['shadow_image']
@@ -219,8 +220,8 @@ if __name__ == "__main__":
             gt = shadow_free.type(Tensor).to(device)
             mask = mask.type(Tensor).to(device)
             crop_coordinate = crop_coordinate.type(Tensor).to(device)
-            gt = torch.clamp(gt, 0, 1)
 
+            optimizer.zero_grad()
             out_p = resnet(inp)
 
             ##
@@ -233,11 +234,9 @@ if __name__ == "__main__":
             inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
             innested_img = exposureRGB_Tens(inp, inp_g)
 
-            #mask, _ = dilate_erode_mask(mask, 5) #allargo la mask di 5px per 
             mask_exp = mask.expand(-1, 3, -1, -1)
             inp_u = torch.cat((innested_img, mask), dim = 1) #tolta masckera
 
-            optimizer.zero_grad()
             out_u = unet(inp_u)
 
             out_f = exposure_3ch(innested_img, out_u)
@@ -254,14 +253,11 @@ if __name__ == "__main__":
                 crop_gt = b[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
                 crop_img = crop_img.expand(1, -1, -1, -1)
                 crop_gt = crop_gt.expand(1, -1, -1, -1)
-                #lpips = criterion_perceptual(crop_img, crop_gt) ##Clamp
                 loss_crop = criterion_pixelwise(crop_img, crop_gt)
                 l_crop.append(loss_crop)
             c_loss = torch.stack(l_crop).mean()
             
-            #perceptual_loss = criterion_perceptual(out_f, gt)
-
-            loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
+            loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + (opt.pixel_weight/2) * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
 
             loss.backward()  
             optimizer.step()
@@ -281,6 +277,7 @@ if __name__ == "__main__":
         # =================================================================================== #
         if (epoch) % opt.valid_checkpoint == 0 or epoch == 1:
             with torch.no_grad():
+                resnet.eval()
                 unet.eval()
 
                 pbar = tqdm.tqdm(total=val_dataset.__len__(), desc=f"Validation Epoch {epoch}/{opt.n_epochs}")
@@ -295,11 +292,11 @@ if __name__ == "__main__":
                     mask = mask.type(Tensor)
                     crop_coordinate = crop_coordinate.type(Tensor)
 
-                    gt = torch.clamp(gt, 0, 1)
+                    d_type = "cuda" if torch.cuda.is_available() else "cpu"
+                    with torch.autocast(device_type=d_type):
+                        out_p = resnet(inp)
 
-                    out_p = resnet(inp)
-
-                    #function to create image where shadow part is form resnet, non shadow part is form input.
+                    ##
                     R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -309,17 +306,15 @@ if __name__ == "__main__":
                     inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
                     innested_img = exposureRGB_Tens(inp, inp_g)
 
-                    #mask, _ = dilate_erode_mask(mask, 5) #allargo la mask di 5px per 
                     mask_exp = mask.expand(-1, 3, -1, -1)
-                    inp_u = torch.cat((innested_img, mask), dim = 1)
+                    inp_u = torch.cat((innested_img, mask), dim = 1) #tolta masckera
 
-                    d_type = "cuda" if torch.cuda.is_available() else "cpu"
                     with torch.autocast(device_type=d_type):
                         out_u = unet(inp_u)
 
                     out_f = exposure_3ch(innested_img, out_u)
 
-                    out_f = torch.clamp(out_f, 0, 1) #clippo per la loss
+                    out_f = torch.clamp(out_f, 0, 1)
 
                     ##LOSS PART
                     l_crop = []
@@ -331,14 +326,11 @@ if __name__ == "__main__":
                         crop_gt = b[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
                         crop_img = crop_img.expand(1, -1, -1, -1)
                         crop_gt = crop_gt.expand(1, -1, -1, -1)
-                        #lpips = criterion_perceptual(crop_img, crop_gt) ##Clamp
                         loss_crop = criterion_pixelwise(crop_img, crop_gt)
                         l_crop.append(loss_crop)
                     c_loss = torch.stack(l_crop).mean()
-
-                    #perceptual_loss = criterion_perceptual(out_f, gt)
-
-                    loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
+                    
+                    loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + (opt.pixel_weight/2) * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt)
 
                     psnr = PSNR_(out_f, gt)
                     rmse = RMSE_(out_f, gt)

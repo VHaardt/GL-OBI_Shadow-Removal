@@ -133,7 +133,8 @@ class UNetTranslator_S(nn.Module):
         self.final = nn.Sequential(
             nn.Upsample(scale_factor=2),
             nn.ZeroPad2d((1, 0, 1, 0)),
-            nn.Conv2d(128, out_channels, 4, padding=1)
+            nn.Conv2d(128, out_channels, 4, padding=1),
+            #nn.Tanh()
         )
 
 
@@ -157,7 +158,6 @@ class UNetTranslator_S(nn.Module):
         u3 = self.up3(u2, d1)
         result = self.final(u3)
 
-        #result = nn.Linear(result) #CONTROLLARE SE TOGLIERE
-        result = F.interpolate(result, size=(h, w), mode='bilinear')
+        result = F.interpolate(result, size=(h, w), mode='bilinear') 
 
         return result

@@ -17,7 +17,7 @@ class CustomResNet50(torch.nn.Module):
         super(CustomResNet50, self).__init__()
         self.freeze = freeze
 
-        self.resnet = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)#pretrained=True)
+        self.resnet = resnet50(weights=None)#weights=ResNet50_Weights.IMAGENET1K_V1)
 
         if self.freeze: # Freeze all layers except the last one
             for param in self.resnet.parameters():

@@ -46,8 +46,8 @@ def parse_args():
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 
-    parser.add_argument("--decay_epoch", type=int, default=400, help="epoch from which to start lr decay")
-    parser.add_argument("--decay_steps", type=int, default=4, help="number of step decays")
+    #parser.add_argument("--decay_epoch", type=int, default=400, help="epoch from which to start lr decay")
+    #parser.add_argument("--decay_steps", type=int, default=4, help="number of step decays")
 
     parser.add_argument("--pixel_weight", type=float, default=1, help="weight of the pixelwise loss")
     parser.add_argument("--perceptual_weight", type=float, default=0.5, help="weight of the perceptual loss")
@@ -89,7 +89,7 @@ def send_telegram_notification(message):
         'chat_id': chat_id,
         'text': message
     }
-    response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload, verify=False)
     return response.json()
 
 
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     # Define optimizer for Resnet
     optimizer_p = torch.optim.Adam(resnet.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-    scheduler_p = torch.optim.lr_scheduler.ExponentialLR(optimizer_p, gamma=0.01) 
+    scheduler_p = torch.optim.lr_scheduler.ExponentialLR(optimizer_p, gamma=0.98) 
     #decay_step_p = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
     #milestones_p = [opt.decay_epoch + i * opt.decay_steps for i in range((opt.n_epochs - opt.decay_epoch) // opt.decay_steps)]
     #scheduler_p = MultiStepLR(optimizer_p, milestones=milestones_p, gamma=0.5)
@@ -207,17 +207,11 @@ if __name__ == "__main__":
             mask = mask.type(Tensor).to(device)
             crop_coordinate = crop_coordinate.type(Tensor).to(device)
 
-            inp = torch.clamp(inp, 0, 1)
-            gt = torch.clamp(gt, 0, 1)
-
             optimizer_p.zero_grad()
             out_p = resnet(inp)
 
-            transformed_images = exposureRGB(inp, out_p)
-
             mask_exp = mask.expand(-1, 3, -1, -1)
 
-            ##
             R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -231,7 +225,10 @@ if __name__ == "__main__":
             border_mask1 = mask_exp - eroded_mask
             border_mask2 = dilated_mask - mask_exp
             border_mask = border_mask1 + border_mask2
-            blurred_innested_img = blur_image_border(innested_img, border_mask, blur_kernel_size=11)
+            blurred_innested_img = torch.nan_to_num(blur_image_border(innested_img, border_mask, blur_kernel_size=11), nan=0.0)
+
+            blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
+            gt = torch.clamp(gt, 0, 1)
 
             l_lpips = []
             for j in range(blurred_innested_img.shape[0]):
@@ -241,11 +238,11 @@ if __name__ == "__main__":
                 crop_gt = b[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
                 crop_img = crop_img.expand(1, -1, -1, -1)
                 crop_gt = crop_gt.expand(1, -1, -1, -1)
-                lpips = criterion_perceptual(crop_img, crop_gt)
+                lpips = criterion_perceptual(torch.clamp(crop_img, 0, 1), torch.clamp(crop_gt, 0, 1))
                 l_lpips.append(lpips)
             perceptual_loss = torch.stack(l_lpips).mean()
 
-            loss = opt.pixel_weight *  criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss #cambiato con blurred/innested
+            loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss #cambiato con blurred/innested
 
             loss.backward()  
             optimizer_p.step()
@@ -263,7 +260,7 @@ if __name__ == "__main__":
         # =================================================================================== #
         #                             2. Validation                                           #
         # =================================================================================== #
-        if (epoch-1) % opt.valid_checkpoint == 0:
+        if (epoch) % opt.valid_checkpoint == 0 or epoch == 1:
             with torch.no_grad():
                 resnet = resnet.eval()
 
@@ -278,14 +275,11 @@ if __name__ == "__main__":
                     gt = shadow_free.type(Tensor)
                     mask = mask.type(Tensor)
                     crop_coordinate = crop_coordinate.type(Tensor)
-                    
-                    inp = torch.clamp(inp, 0, 1)
-                    gt = torch.clamp(gt, 0, 1)
 
                     d_type = "cuda" if torch.cuda.is_available() else "cpu"
                     with torch.autocast(device_type=d_type):
                         out_p = resnet(inp)
-                    transformed_images = exposureRGB(inp, out_p)
+
                     mask_exp = mask.expand(-1, 3, -1, -1)
 
                     #function to create image where shadow part is form resnet, non shadow part is form input.
@@ -302,8 +296,11 @@ if __name__ == "__main__":
                     border_mask1 = mask_exp - eroded_mask
                     border_mask2 = dilated_mask - mask_exp
                     border_mask = border_mask1 + border_mask2
-                    blurred_innested_img = blur_image_border(innested_img, border_mask, blur_kernel_size=11)
+                    blurred_innested_img = torch.nan_to_num(blur_image_border(innested_img, border_mask, blur_kernel_size=11), nan=0.0)
 
+                    blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
+                    gt = torch.clamp(gt, 0, 1)
+                    
                     l_lpips = []
                     for j in range(blurred_innested_img.shape[0]):
                         a = blurred_innested_img[j]
@@ -312,17 +309,17 @@ if __name__ == "__main__":
                         crop_gt = b[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
                         crop_img = crop_img.expand(1, -1, -1, -1)
                         crop_gt = crop_gt.expand(1, -1, -1, -1)
-                        lpips = criterion_perceptual(crop_img, crop_gt)
+                        lpips = criterion_perceptual(torch.clamp(crop_img, 0, 1), torch.clamp(crop_gt, 0, 1))
                         l_lpips.append(lpips)
                     perceptual_loss = torch.stack(l_lpips).mean()
 
-                    loss = opt.pixel_weight * criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss
+                    loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss
 
-                    psnr = PSNR_(blurred_innested_img, gt)
-                    rmse = RMSE_(blurred_innested_img, gt)
+                    psnr = PSNR_(innested_img, gt) #psnr = PSNR_(blurred_innested_img, gt)
+                    rmse = RMSE_(innested_img, gt) #rmse = RMSE_(blurred_innested_img, gt)
 
-                    psnr_shadow = PSNR_(blurred_innested_img*mask_exp, gt*mask_exp)
-                    rmse_shadow = RMSE_(blurred_innested_img*mask_exp, gt*mask_exp)
+                    psnr_shadow = PSNR_(innested_img * mask_exp, gt * mask_exp) #psnr_shadow = PSNR_(blurred_innested_img*mask_exp, gt*mask_exp)
+                    rmse_shadow = RMSE_(innested_img * mask_exp, gt * mask_exp) #rmse_shadow = RMSE_(blurred_innested_img*mask_exp, gt*mask_exp)
                     
                     pretrain_valid_epoch_loss += loss.detach().item()
 
@@ -338,18 +335,19 @@ if __name__ == "__main__":
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
-                        im_pred = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                        #im_pred = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_innest = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_blur = (blurred_innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8) #gt
 
                         im_input = np.clip(im_input, 0, 255) #inserimento per rimuovere astrazioni... CONTROLLARE
-                        im_pred = np.clip(im_pred, 0, 255)
+                        #im_pred = np.clip(im_pred, 0, 255)
                         im_innest = np.clip(im_innest, 0, 255)
                         im_blur = np.clip(im_blur, 0, 255)
                         im_gt = np.clip(im_gt, 0, 255)
 
-                        im_conc = np.concatenate((im_input, im_pred, im_innest, im_blur, im_gt), axis=1)
+                        #im_conc = np.concatenate((im_input, im_pred, im_innest, im_blur, im_gt), axis=1)
+                        im_conc = np.concatenate((im_input, im_innest, im_blur, im_gt), axis=1)
                         im_conc = cv2.cvtColor(im_conc, cv2.COLOR_RGB2BGR)
 
                         font = cv2.FONT_HERSHEY_SIMPLEX

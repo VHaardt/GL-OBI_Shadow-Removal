@@ -14,7 +14,7 @@ def exposureRGB(img, out):
     rgb_img[:, 1, :, :] = (img[:, 1, :, :]*G_a) + G_b
     rgb_img[:, 2, :, :] = (img[:, 2, :, :]*B_a) + B_b
     
-    rgb_img = torch.clamp(rgb_img, 0, 1)
+    #rgb_img = torch.clamp(rgb_img, 0, 1) #tolto in UNet
     
     return rgb_img
 
@@ -35,6 +35,24 @@ def exposureRGB_Tens(inp, out_g):
     rgb_img[:, 2, :, :] = (inp[:, 2, :, :] * B_a) + B_b
     
     # Clipping the values to maintain the range [0, 1]
-    rgb_img = torch.clamp(rgb_img, 0, 1)
+    #rgb_img = torch.clamp(rgb_img, 0, 1) #tolto in UNet
+    
+    return rgb_img
+
+def exposure_3ch(inp, out_g):
+    # Splitting the output tensor into individual parameter tensors
+    R = out_g[:, 0, :, :]
+    G = out_g[:, 1, :, :]
+    B = out_g[:, 2, :, :]
+
+
+    # Applying the exposure transformation to the input image
+    rgb_img = torch.zeros_like(inp)
+    rgb_img[:, 0, :, :] = inp[:, 0, :, :] + R
+    rgb_img[:, 1, :, :] = inp[:, 1, :, :] + G
+    rgb_img[:, 2, :, :] = inp[:, 2, :, :] + B
+    
+    # Clipping the values to maintain the range [0, 1]
+    #rgb_img = torch.clamp(rgb_img, 0, 1) #tolto in UNet
     
     return rgb_img

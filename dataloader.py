@@ -3,9 +3,9 @@ import numpy as np
 import random
 import torch.utils.data as data
 import cv2
-from utils.utils_io import read_image
-import skimage
-from scipy.ndimage import label, find_objects, binary_closing, generate_binary_structure
+from utils.utils_io import read_image, process_mask
+#import skimage
+#from scipy.ndimage import label, find_objects, binary_closing, generate_binary_structure
 
 import ipdb
 
@@ -45,7 +45,7 @@ class ISTDDataset(data.Dataset):
         if len(shadow_mask.shape) == 2:
             shadow_mask = np.expand_dims(shadow_mask, axis=2)
 
-        shadow_mask = self.process_mask(shadow_mask, min_size=100, max_size=100) ####
+        shadow_mask = process_mask(shadow_mask, min_size=100, max_size=100) ####
         
         crop_coordinate = self.crop_region(shadow_mask) #######
 
@@ -73,10 +73,11 @@ class ISTDDataset(data.Dataset):
             shadow_free_image[:, :, ch] = (shadow_free_image[:, :, ch] - sh_free_im_mean) / sh_free_im_std
             shadow_free_image[:, :, ch] = shadow_free_image[:, :, ch] * sh_im_std + sh_im_mean
         
+            shadow_free_image[:, :, ch] = np.clip(shadow_free_image[:, :, ch], 0, 1) #aggiunta
 
         return shadow_free_image
     
-    def remove_small_objects(self, mask, min_size):
+    '''def remove_small_objects(self, mask, min_size):
         labeled_mask, num_features = label(mask)
         output_mask = np.zeros_like(mask, dtype=bool)
         for i in range(1, num_features + 1):
@@ -101,7 +102,7 @@ class ISTDDataset(data.Dataset):
         cleaned_mask = self.remove_small_objects(mask, min_size)
         final_mask = self.fill_small_holes(cleaned_mask, max_size)
         
-        return final_mask
+        return final_mask'''
     
     def crop_region(self, shadow_mask, m = 40):
         """Crop the image around the scattered points in the mask ensuring minimum size"""
