@@ -11,6 +11,7 @@ from models.ResNet import CustomResNet101, CustomResNet50
 from models.UNet import UNetTranslator_S, UNetTranslator
 from datetime import datetime
 from utils.metrics import PSNR, RMSE
+from skimage.metrics import structural_similarity as SSIM_
 from utils.exposure import exposureRGB_Tens, exposure_3ch
 from utils.blurring import blur_image_border, dilate_erode_mask, penumbra
 import numpy as np
@@ -183,12 +184,26 @@ if __name__ == "__main__":
     #g: for global -> loss of unet
     
     train_loss = []
-    train_val_loss = []
+    val_loss = []
 
-    train_val_rmse = []
-    train_val_psnr = []
-    train_val_psnr_shadow = []
-    train_val_rmse_shadow = []
+    val_rmse = []
+    val_psnr = []
+    val_mae = []
+    val_ssim = []
+    val_lpips = []
+
+    val_psnr_s = []
+    val_rmse_s = []
+    val_mae_s = []
+    val_ssim_s = []
+
+    val_psnr_ns = []
+    val_rmse_ns = []
+    val_mae_ns = []
+    val_ssim_ns = []
+
+
+
 
     best_loss = 1e3 # arbitrary large number
 
@@ -198,14 +213,26 @@ if __name__ == "__main__":
     # =================================================================================== #
 
     for epoch in range(1, opt.n_epochs + 1):
+        
         train_epoch_loss = 0
+        val_epoch_loss = 0
 
-        train_valid_epoch_loss = 0
+        rmse_epoch = 0
+        psnr_epoch = 0
+        psnr_epoch_s = 0
+        rmse_epoch_s = 0
+        psnr_epoch_ns = 0
+        rmse_epoch_ns = 0
 
-        train_rmse_epoch = 0
-        train_psnr_epoch = 0
-        train_psnr_epoch_shadow = 0
-        train_rmse_epoch_shadow = 0
+        #mae_epoch = 0
+        #mae_epoch_s = 0
+        #mae_epoch_ns = 0
+
+        #ssim_epoch = 0
+        #ssim_epoch_s = 0
+        #ssim_epoch_ns = 0
+
+        #lpips_epoch = 0
 
         unet = unet.train()
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"UNet Training Epoch {epoch}/{opt.n_epochs}")
@@ -214,23 +241,30 @@ if __name__ == "__main__":
             shadow_free = data['shadow_free_image']
             mask = data['shadow_mask']
             crop_coordinate = data['crop_coordinate']
+            exp_img = data['exposed_image']
 
             inp = shadow.type(Tensor).to(device)
             gt = shadow_free.type(Tensor).to(device)
             mask = mask.type(Tensor).to(device)
             crop_coordinate = crop_coordinate.type(Tensor).to(device)
+            exp_img = exp_img.type(Tensor).to(device)
 
-            out_p = resnet(inp)
+            #out_p = resnet(inp)
 
             ##
-            R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+            '''R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
-            innested_img = exposureRGB_Tens(inp, inp_g)
+            B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))'''
+
+            #R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat = [out_p[:, i].view(-1, 1, 1, 1).expand(-1, 1, inp.size(2), inp.size(3)) for i in range(6)]
+
+            #inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
+            #innested_img = exposureRGB_Tens(inp, inp_g)
+
+            innested_img = torch.where(mask == 0., inp, exp_img)
 
             penumbra_tens = torch.empty_like(mask)
             for i in range(mask.shape[0]):
@@ -255,7 +289,7 @@ if __name__ == "__main__":
             out_f = torch.clamp(out_f, 0, 1)
             gt = torch.clamp(gt, 0, 1)
 
-            loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0])+ 0.4 * criterion_perceptual(out_f, gt) 
+            loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + 0.4 * criterion_perceptual(out_f, gt) 
             #loss = criterion_pixelwise(out_f[pen_mask_exp != 0], gt[pen_mask_exp != 0])
 
             loss.backward()  
@@ -284,25 +318,30 @@ if __name__ == "__main__":
                     shadow_free = data['shadow_free_image']
                     mask = data['shadow_mask']
                     crop_coordinate = data['crop_coordinate']
+                    exp_img = data['exposed_image']
 
-                    inp = shadow.type(Tensor)
-                    gt = shadow_free.type(Tensor)
-                    mask = mask.type(Tensor)
-                    crop_coordinate = crop_coordinate.type(Tensor)
+                    inp = shadow.type(Tensor).to(device)
+                    gt = shadow_free.type(Tensor).to(device)
+                    mask = mask.type(Tensor).to(device)
+                    crop_coordinate = crop_coordinate.type(Tensor).to(device)
+                    exp_img = exp_img.type(Tensor).to(device)
 
-                    gt = torch.clamp(gt, 0, 1)
+                    #out_p = resnet(inp)
 
-                    out_p = resnet(inp)
-
-                    #function to create image where shadow part is form resnet, non shadow part is form input.
-                    R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                    ##
+                    '''R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
-                    innested_img = exposureRGB_Tens(inp, inp_g)
+                    B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))'''
+
+                    #R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat = [out_p[:, i].view(-1, 1, 1, 1).expand(-1, 1, inp.size(2), inp.size(3)) for i in range(6)]
+
+                    #inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
+                    #innested_img = exposureRGB_Tens(inp, inp_g)
+
+                    innested_img = torch.where(mask == 0., inp, exp_img)
 
                     penumbra_tens = torch.empty_like(mask)
                     for i in range(mask.shape[0]):
@@ -328,28 +367,72 @@ if __name__ == "__main__":
                     out_f = torch.clamp(out_f, 0, 1)
                     gt = torch.clamp(gt, 0, 1)
 
-                    loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0])+ 0.4 * criterion_perceptual(out_f, gt) 
+                    loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + 0.4 * criterion_perceptual(out_f, gt) 
                     #loss = criterion_pixelwise(out_f[pen_mask_exp != 0], gt[pen_mask_exp != 0])
 
-                    psnr = PSNR_(out_f, gt)
-                    rmse = RMSE_(out_f, gt)
-
-                    psnr_shadow = PSNR_(out_f*mask_exp, gt*mask_exp)
-                    rmse_shadow = RMSE_(out_f*mask_exp, gt*mask_exp)
+                    ### METRICS ##########################################################################
                     
-                    train_valid_epoch_loss += loss.detach().item()
+                    #PSNR
+                    psnr = PSNR_(out_f, gt)
+                    psnr_s = PSNR_(out_f*mask_exp, gt*mask_exp)
+                    psnr_ns = PSNR_(out_f * (1 - mask_exp), gt * (1 - mask_exp))
 
-                    train_psnr_epoch += psnr.detach().item()
-                    train_psnr_epoch_shadow += psnr_shadow.detach().item()
-                    train_rmse_epoch += rmse.detach().item()
-                    train_rmse_epoch_shadow += rmse_shadow.detach().item()
+                    #RMSE
+                    rmse = RMSE_(out_f, gt)
+                    rmse_s = RMSE_(out_f*mask_exp, gt*mask_exp)
+                    rmse_ns = RMSE_(out_f * (1 - mask_exp), gt * (1 - mask_exp))
+
+                    #LPIPS
+                    #lpips = criterion_perceptual(out_f, gt)
+
+                    #MAE
+                    #ouput_lab = cv2.cvtColor(torch.clamp(out_f[0], 0, 1).cpu().numpy().squeeze().transpose((1, 2, 0)), cv2.COLOR_RGB2LAB)
+                    #gt_lab = cv2.cvtColor(torch.clamp(gt[0], 0, 1).cpu().numpy().transpose(1, 2, 0), cv2.COLOR_RGB2LAB)
+                    #bm = mask[0].cpu().numpy().transpose(1, 2, 0)
+
+                    #mae = np.abs(ouput_lab - gt_lab).mean()
+                    #mae_s= np.abs(ouput_lab * bm - gt_lab * bm).sum() / bm.sum()
+                    #mae_ns = np.abs(ouput_lab * (1-bm) - gt_lab * (1-bm)).sum() / (1-bm).sum()
+            
+                    #SSIM
+                    #output_g = cv2.cvtColor(torch.clamp(out_f[0], 0, 1).cpu().numpy().squeeze().transpose((1, 2, 0)), cv2.COLOR_RGB2GRAY)
+                    #gt_g = cv2.cvtColor(torch.clamp(gt[0], 0, 1).cpu().numpy().transpose(1, 2, 0), cv2.COLOR_RGB2GRAY)
+
+                    #ssim = SSIM_(output_g, gt_g, data_range=1.0, channel_axis=None)
+                    #ssim_s = SSIM_(output_g * bm.squeeze(), gt_g * bm.squeeze(), data_range=1.0, channel_axis=None)
+                    #ssim_ns = SSIM_(output_g * (1 - bm.squeeze()), gt_g * (1 - bm.squeeze()), data_range=1.0, channel_axis=None)
+                    
+                    val_epoch_loss += loss.detach().item()
+
+                    psnr_epoch += psnr.detach().item()
+                    psnr_epoch_s += psnr_s.detach().item()
+                    psnr_epoch_ns += psnr_ns.detach().item()
+
+                    rmse_epoch += rmse.detach().item()
+                    rmse_epoch_s += rmse_s.detach().item()
+                    rmse_epoch_ns += rmse_ns.detach().item()
+
+                    #mae_epoch += mae
+                    #mae_epoch_s += mae_s
+                    #mae_epoch_ns += mae_ns
+
+                    #ssim_epoch += ssim
+                    #ssim_epoch_s += ssim_s
+                    #ssim_epoch_ns += ssim_ns
+
+                    #lpips_epoch += lpips.detach().item()
 
                     pbar.update(val_dataset.__len__()/len(val_loader))
                 pbar.close()
 
-                if opt.save_images:# and (epoch == 1 or epoch % 10 == 0):
+                if opt.save_images and (epoch == 1 or epoch % 50 == 0):
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
+                        shadow = torch.clamp(shadow, 0, 1)
+                        innested_img = torch.clamp(innested_img, 0, 1)
+                        out_f = torch.clamp(out_f, 0, 1)
+                        gt = torch.clamp(gt, 0, 1)
+
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_blur = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_pred = (out_f[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
@@ -366,16 +449,30 @@ if __name__ == "__main__":
                         # Save image to disk
                         cv2.imwrite(os.path.join(checkpoint_dir, "images", f"epoch_{epoch}_img_{count}.png"),im_conc)
 
-                train_val_loss.append(train_valid_epoch_loss / len(val_loader))
-                train_val_rmse.append(train_rmse_epoch / len(val_loader))
-                train_val_rmse_shadow.append(train_rmse_epoch_shadow / len(val_loader))
-                train_val_psnr.append(train_psnr_epoch / len(val_loader))
-                train_val_psnr_shadow.append(train_psnr_epoch_shadow / len(val_loader))
+                val_loss.append(val_epoch_loss / len(val_loader))
+
+                val_rmse.append(rmse_epoch / len(val_loader))
+                val_rmse_s.append(rmse_epoch_s / len(val_loader))
+                val_rmse_ns.append(rmse_epoch_ns / len(val_loader))
+
+                val_psnr.append(psnr_epoch / len(val_loader))
+                val_psnr_s.append(psnr_epoch_s / len(val_loader))
+                val_psnr_ns.append(psnr_epoch_ns / len(val_loader))
+
+                #val_mae.append(mae_epoch / len(val_loader))
+                #val_mae_s.append(mae_epoch_s / len(val_loader))
+                #val_mae_ns.append(mae_epoch_ns / len(val_loader))
+
+                #val_ssim.append(ssim_epoch / len(val_loader))
+                #val_ssim_s.append(ssim_epoch_s / len(val_loader))
+                #val_ssim_ns.append(ssim_epoch_ns / len(val_loader))
+
+                #val_lpips.append(lpips_epoch / len(val_loader))
 
                 if opt.checkpoint_mode != "n":
                     os.makedirs(os.path.join(checkpoint_dir, "weights"), exist_ok=True)
-                    if train_valid_epoch_loss < best_loss:
-                        best_loss = train_valid_epoch_loss
+                    if val_epoch_loss < best_loss:
+                        best_loss = val_epoch_loss
                         torch.save(unet.state_dict(), os.path.join(checkpoint_dir, "weights", "best_unet_train.pth"))
                     
                     torch.save(unet.state_dict(), os.path.join(checkpoint_dir, "weights", "last_unet_train.pth"))
@@ -383,11 +480,7 @@ if __name__ == "__main__":
                     if opt.checkpoint_mode == "all":
                         torch.save(unet.state_dict(), os.path.join(checkpoint_dir, "weights", f"epoch_{epoch}_unet_train.pth"))
 
-                
-
-                
-            #print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss: {val_pix_loss[-1]}] [Valid Perceptual Loss: {val_perceptual_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
-            print(f"[Valid Loss: {train_val_loss[-1]}] [Valid RMSE: {train_val_rmse[-1]}] [Valid PSNR: {train_val_psnr[-1]}] [Valid PSNR Shadow: {train_val_psnr_shadow[-1]} [Valid RMSE Shadow: {train_val_rmse_shadow[-1]}]]")
+            print(f"[Valid Loss: {val_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]]")# [Valid MAE: {mae[-1]}] [Valid SSIM: {ssim[-1]}] [Valid LPIPS: {lpips[-1]}]]")
 
         #remove in final version
         if epoch == round(0.25 * opt.n_epochs):
@@ -399,17 +492,28 @@ if __name__ == "__main__":
         elif (opt.n_epochs - epoch) == 10 and opt.n_epochs != 40:
             send_telegram_notification(f"Only {opt.n_epochs - epoch} epochs remain. :))")
 
-
-
-            
         # Save metrics to disk
         metrics_dict = {
             "train_loss_unet": train_loss,
-            "val_loss_unet": train_val_loss,
-            "all_RMSE": train_val_rmse,
-            "shadow_RMSE": train_val_rmse_shadow,
-            "all_PSNR": train_val_psnr,
-            "shadow_PSNR": train_val_psnr_shadow
+            "val_loss_unet": val_loss,
+
+            "all_PSNR": val_psnr,
+            "shadow_PSNR": val_psnr_s,
+            "nonshadow_PSNR": val_psnr_ns,
+            
+            "all_RMSE": val_rmse,
+            "shadow_RMSE": val_rmse_s,
+            "nonshadow_RMSE": val_rmse_ns
+
+            #"all_MAE":  mae,
+            #"shadow_MAE": mae_s,
+            #"nonshadow_MAE": mae_ns,
+
+            #"all_SSIM": ssim,
+            #"shadow_SSIM": ssim_s,
+            #"nonshadow_SSIM": ssim_ns,
+
+            #"LPIPS": lpips
         }
 
         with open(os.path.join(checkpoint_dir, "metrics.json"), "w") as f:

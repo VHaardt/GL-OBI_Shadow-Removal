@@ -61,3 +61,7 @@ class RMSE():
         rmse = torch.sqrt(mse) # rmse for each mse in the batch
 
         return torch.mean(rmse)
+    
+
+
+            

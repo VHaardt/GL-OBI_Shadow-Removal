@@ -55,3 +55,19 @@
     - input: img + mask
     - out: 3ch non vincolati, residui da applicare
     - loss: L1(shadow) + 0.5 L1(crop) + 0.2 LPIPS(all)
+* UNET2_A:
+    - input: img + penumbra
+    - out: 3ch non vincolati, residui da applicare
+    - loss: L1(shadow) + 0.5 L1(penumbra) + 0.4 LPIPS(all)
+* UNET2_B:
+    - input: img + penumbra
+    - out: 3ch non vincolati, da applicare solo all ombra
+    - loss: L1(shadow + penumbra)
+* UNET2_C:
+    - input: img + penumbra
+    - out: 3ch non vincolati, da applicare solo all ombra
+    - loss: L1(shadow) + 0.5 L1(penumbra)
+* UNET2_D:
+    - input: img + og_input + penumbra
+    - out: 3ch non vincolati, da applicare solo all ombra
+    - loss: L1(shadow) + 0.5 L1(penumbra)
