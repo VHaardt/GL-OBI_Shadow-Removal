@@ -210,16 +210,35 @@ if __name__ == "__main__":
             optimizer_p.zero_grad()
             out_p = resnet(inp)
 
-            mask_exp = mask.expand(-1, 3, -1, -1)
+            exposure_img = torch.zeros_like(inp)
 
-            R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-            inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
-            innested_img = exposureRGB_Tens(inp, inp_g)
+            for c in range(inp.shape[1]):
+                j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
+                inp_ch = inp[:, c, :, :]
+
+                mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                sd = torch.empty(inp.shape[0], device=device)
+
+                for b in range(inp.shape[0]):  
+                    inp_b = inp[b, c, :, :] 
+                    mask_b = mask[b, 0, :, :]  
+                    med = torch.mean(inp_b[mask_b == 1])
+                    mu[b] = med.item()
+                    stand = torch.std(inp_b[mask_b == 1])
+                    sd[b] = stand.item()
+
+                mu = mu.view(-1, 1, 1).to(device)
+                sd = sd.view(-1, 1, 1).to(device)
+
+                mu_t = out_p[:, j+1].view(-1, 1, 1).to(device)
+                sd_t = out_p[:, j].view(-1, 1, 1).to(device)
+
+                exposed_img_ch = mu_t + (inp_ch - mu) * (sd_t / (sd + 1e-5))
+                exposure_img[:, c, :, :] = exposed_img_ch
+
+            innested_img = torch.where(mask == 0., inp, exposure_img)
+
+            mask_exp = mask.expand(-1, 3, -1, -1)
                         
             dilated_mask, eroded_mask = dilate_erode_mask(mask, kernel_size=10)
             border_mask1 = mask_exp - eroded_mask
@@ -227,10 +246,10 @@ if __name__ == "__main__":
             border_mask = border_mask1 + border_mask2
             blurred_innested_img = torch.nan_to_num(blur_image_border(innested_img, border_mask, blur_kernel_size=11), nan=0.0)
 
-            blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
-            gt = torch.clamp(gt, 0, 1)
+            #blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
+            #gt = torch.clamp(gt, 0, 1)
 
-            l_lpips = []
+            '''l_lpips = []
             for j in range(blurred_innested_img.shape[0]):
                 a = blurred_innested_img[j]
                 b = gt[j]
@@ -240,9 +259,35 @@ if __name__ == "__main__":
                 crop_gt = crop_gt.expand(1, -1, -1, -1)
                 lpips = criterion_perceptual(torch.clamp(crop_img, 0, 1), torch.clamp(crop_gt, 0, 1))
                 l_lpips.append(lpips)
-            perceptual_loss = torch.stack(l_lpips).mean()
+            perceptual_loss = torch.stack(l_lpips).mean()'''
 
-            loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss #cambiato con blurred/innested
+            mu_out = torch.empty(3, inp.shape[0]).to(device)  # Forma: [3, batch_size] for R, G, B channels
+            sd_out = torch.empty(3, inp.shape[0]).to(device)
+
+            # Extract means and std deviations for R, G, B channels from 'out_p'
+            for c in range(3):
+                j = 2 * c  # Indexing for mean (j+1) and std dev (j)
+                mu_out[c] = out_p[:, j + 1]  # Access the mean value for the channel
+                sd_out[c] = out_p[:, j]      # Access the std dev value for the channel
+
+            # Preallocate tensors for ground truth (gt) statistics (mean and std dev) for each channel
+            mu_gt = torch.empty(3, inp.shape[0]).to(device)  # Forma: [3, batch_size] for R, G, B channels
+            sd_gt = torch.empty(3, inp.shape[0]).to(device)
+
+            # Compute the means and std deviations for the ground truth (gt) using the mask
+            for c in range(gt.shape[1]):
+                for b in range(gt.shape[0]):  
+                    gt_b = inp[b, c, :, :]   # Extract the current channel (R, G, B)
+                    mask_b = mask[b, 0, :, :]  # Get the corresponding mask
+                    med_gt = torch.mean(gt_b[mask_b == 1])
+                    stand_gt = torch.std(gt_b[mask_b == 1])
+                    
+                    mu_gt[c, b] = med_gt.item()
+                    sd_gt[c, b] = stand_gt.item()
+
+
+            #loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) #+ opt.perceptual_weight * perceptual_loss #cambiato con blurred/innested
+            loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + 0.2*(sum(criterion_pixelwise(mu_out[c], mu_gt[c]) + criterion_pixelwise(sd_out[c], sd_gt[c]) for c in range(3)))
 
             loss.backward()  
             optimizer_p.step()
@@ -280,17 +325,35 @@ if __name__ == "__main__":
                     with torch.autocast(device_type=d_type):
                         out_p = resnet(inp)
 
-                    mask_exp = mask.expand(-1, 3, -1, -1)
+                    exposure_img = torch.zeros_like(inp)
 
-                    #function to create image where shadow part is form resnet, non shadow part is form input.
-                    R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                    inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
-                    innested_img = exposureRGB_Tens(inp, inp_g)
+                    for c in range(inp.shape[1]):
+                        j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
+                        inp_ch = inp[:, c, :, :]
+
+                        mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                        sd = torch.empty(inp.shape[0], device=device)
+
+                        for b in range(inp.shape[0]):  
+                            inp_b = inp[b, c, :, :] 
+                            mask_b = mask[b, 0, :, :]  
+                            med = torch.mean(inp_b[mask_b == 1])
+                            mu[b] = med.item()
+                            stand = torch.std(inp_b[mask_b == 1])
+                            sd[b] = stand.item()
+
+                        mu = mu.view(-1, 1, 1).to(device)
+                        sd = sd.view(-1, 1, 1).to(device)
+
+                        mu_t = out_p[:, j+1].view(-1, 1, 1).to(device)
+                        sd_t = out_p[:, j].view(-1, 1, 1).to(device)
+
+                        exposed_img_ch = mu_t + (inp_ch - mu) * (sd_t / (sd + 1e-5))
+                        exposure_img[:, c, :, :] = exposed_img_ch
+
+                    innested_img = torch.where(mask == 0., inp, exposure_img)
+
+                    mask_exp = mask.expand(-1, 3, -1, -1)
 
                     dilated_mask, eroded_mask = dilate_erode_mask(mask, kernel_size=10)
                     border_mask1 = mask_exp - eroded_mask
@@ -298,10 +361,10 @@ if __name__ == "__main__":
                     border_mask = border_mask1 + border_mask2
                     blurred_innested_img = torch.nan_to_num(blur_image_border(innested_img, border_mask, blur_kernel_size=11), nan=0.0)
 
-                    blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
-                    gt = torch.clamp(gt, 0, 1)
+                    #blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
+                    #gt = torch.clamp(gt, 0, 1)
                     
-                    l_lpips = []
+                    '''l_lpips = []
                     for j in range(blurred_innested_img.shape[0]):
                         a = blurred_innested_img[j]
                         b = gt[j]
@@ -311,9 +374,34 @@ if __name__ == "__main__":
                         crop_gt = crop_gt.expand(1, -1, -1, -1)
                         lpips = criterion_perceptual(torch.clamp(crop_img, 0, 1), torch.clamp(crop_gt, 0, 1))
                         l_lpips.append(lpips)
-                    perceptual_loss = torch.stack(l_lpips).mean()
+                    perceptual_loss = torch.stack(l_lpips).mean()'''
 
-                    loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + opt.perceptual_weight * perceptual_loss
+                    mu_out = torch.empty(3, inp.shape[0]).to(device)  # Forma: [3, batch_size] for R, G, B channels
+                    sd_out = torch.empty(3, inp.shape[0]).to(device)
+
+                    # Extract means and std deviations for R, G, B channels from 'out_p'
+                    for c in range(3):
+                        j = 2 * c  # Indexing for mean (j+1) and std dev (j)
+                        mu_out[c] = out_p[:, j + 1]  # Access the mean value for the channel
+                        sd_out[c] = out_p[:, j]      # Access the std dev value for the channel
+
+                    # Preallocate tensors for ground truth (gt) statistics (mean and std dev) for each channel
+                    mu_gt = torch.empty(3, inp.shape[0]).to(device)  # Forma: [3, batch_size] for R, G, B channels
+                    sd_gt = torch.empty(3, inp.shape[0]).to(device)
+
+                    # Compute the means and std deviations for the ground truth (gt) using the mask
+                    for c in range(gt.shape[1]):
+                        for b in range(gt.shape[0]):  
+                            gt_b = inp[b, c, :, :]   # Extract the current channel (R, G, B)
+                            mask_b = mask[b, 0, :, :]  # Get the corresponding mask
+                            med_gt = torch.mean(gt_b[mask_b == 1])
+                            stand_gt = torch.std(gt_b[mask_b == 1])
+                            
+                            mu_gt[c, b] = med_gt.item()
+                            sd_gt[c, b] = stand_gt.item()
+
+                    #loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) #+ opt.perceptual_weight * perceptual_loss
+                    loss = opt.pixel_weight * criterion_pixelwise(blurred_innested_img[mask_exp != 0], gt[mask_exp != 0]) + 0.2*(sum(criterion_pixelwise(mu_out[c], mu_gt[c]) + criterion_pixelwise(sd_out[c], sd_gt[c]) for c in range(3)))
 
                     psnr = PSNR_(innested_img, gt) #psnr = PSNR_(blurred_innested_img, gt)
                     rmse = RMSE_(innested_img, gt) #rmse = RMSE_(blurred_innested_img, gt)
@@ -331,23 +419,29 @@ if __name__ == "__main__":
                     pbar.update(val_dataset.__len__()/len(val_loader))
                 pbar.close()
 
-                if opt.save_images: #and (epoch == 1 or epoch % 10 == 0):
+                if opt.save_images and (epoch == 1 or epoch % 50 == 0):
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
+                        shadow = torch.clamp(shadow, 0, 1)
+                        innested_img = torch.clamp(innested_img, 0, 1)
+                        exposure_img = torch.clamp(exposure_img, 0, 1)
+                        blurred_innested_img = torch.clamp(blurred_innested_img, 0, 1)
+                        gt = torch.clamp(gt, 0, 1)
+
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
-                        #im_pred = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                        im_pred = (exposure_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_innest = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_blur = (blurred_innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8) #gt
 
                         im_input = np.clip(im_input, 0, 255) #inserimento per rimuovere astrazioni... CONTROLLARE
-                        #im_pred = np.clip(im_pred, 0, 255)
+                        im_pred = np.clip(im_pred, 0, 255)
                         im_innest = np.clip(im_innest, 0, 255)
                         im_blur = np.clip(im_blur, 0, 255)
                         im_gt = np.clip(im_gt, 0, 255)
 
-                        #im_conc = np.concatenate((im_input, im_pred, im_innest, im_blur, im_gt), axis=1)
-                        im_conc = np.concatenate((im_input, im_innest, im_blur, im_gt), axis=1)
+                        im_conc = np.concatenate((im_input, im_pred, im_innest, im_blur, im_gt), axis=1)
+                        #im_conc = np.concatenate((im_input, im_innest, im_blur, im_gt), axis=1)
                         im_conc = cv2.cvtColor(im_conc, cv2.COLOR_RGB2BGR)
 
                         font = cv2.FONT_HERSHEY_SIMPLEX
