@@ -432,6 +432,7 @@ if __name__ == "__main__":
                         innested_img = torch.clamp(innested_img, 0, 1)
                         out_f = torch.clamp(out_f, 0, 1)
                         gt = torch.clamp(gt, 0, 1)
+                        #
 
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_blur = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
