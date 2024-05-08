@@ -3,7 +3,7 @@ import os
 import torch
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
-from dataloader import WSRDDataset, ISTDDataset
+from dataloader import ISTDDataset
 from models.UNet import UNetTranslator, UNetTranslator_S
 from datetime import datetime
 from utils.metrics import PSNR, RMSE
@@ -94,18 +94,30 @@ if __name__ == "__main__":
         input_channels = 3
         output_channels = 3
 
-    # Define model
+    # Define ResNet
+    rnet = models.resnet101(pretrained=True) #may chage type of resnet
+    resnet = torch.nn.Sequential(*(list(model.children())[:-1]))
+    resnet.add_module('fc', nn.Linear(2048, 6))#alpha and beta for 3 channel 
+    resnet.to(device)
+    
+    # Define UNet
     if opt.model_size == "S":
-        model = UNetTranslator_S(in_channels=3, out_channels=3, deconv=False, local=0, residual=True).to(device)
+        unet = UNetTranslator_S(in_channels=3, out_channels=3, deconv=False, local=0, residual=True).to(device)
     else:
-        model = UNetTranslator(in_channels=3, out_channels=3, deconv=False, local=0, residual=True).to(device)
+        unet = UNetTranslator(in_channels=3, out_channels=3, deconv=False, local=0, residual=True).to(device)
     model.apply(weights_init_normal)
 
-    n_params = model.count_parameters()
-    print(f"Model has {n_params} trainable parameters")
+    
+    n_params1 = resnet.count_parameters()
+    n_params2 = unet.count_parameters()
+    print(f"Model 1 has {n_params1} trainable parameters")
     with open(os.path.join(checkpoint_dir, "architecture.txt"), "w") as f:
-        f.write("Model has " + str(n_params) + " trainable parameters\n")
-        f.write(str(model))
+        f.write("Model has " + str(n_params1) + " trainable parameters\n")
+        f.write(str(resnet))
+    print(f"Model 2 has {n_params2} trainable parameters")
+    with open(os.path.join(checkpoint_dir, "architecture.txt"), "w") as f:
+        f.write("Model has " + str(n_params2) + " trainable parameters\n")
+        f.write(str(unet))
 
     
     # Define loss
@@ -126,11 +138,8 @@ if __name__ == "__main__":
 
     Tensor = torch.cuda.FloatTensor if opt.gpu >= 0 else torch.FloatTensor
 
-    # Define dataloaders
-    if "challenge" in opt.dataset_path:
-        train_dataset = WSRDDataset(os.path.join(opt.dataset_path, "train"), size=(opt.img_height, opt.img_width), aug=True, masks_precomp=True)
-        val_dataset = WSRDDataset(os.path.join(opt.dataset_path, "val"), size=(opt.img_height, opt.img_width), aug=False, masks_precomp=True)
-    elif "ISTD" in opt.dataset_path:
+    # Define dataloader
+    if "ISTD" in opt.dataset_path:
         train_dataset = ISTDDataset(os.path.join(opt.dataset_path, "train"), size=(opt.img_height, opt.img_width), aug=True, fix_color=True)
         val_dataset = ISTDDataset(os.path.join(opt.dataset_path, "test"), aug=False, fix_color=True)
 
@@ -152,14 +161,23 @@ if __name__ == "__main__":
                                                     generator=g)
     
     # Init losses and metrics lists
-    train_loss = []
-    val_loss = []
+    #p: for partial -> loss of resnet
+    #g: for global -> loss of unet
+    
+    train_loss_p = []
+    val_loss_p = []
+    train_loss_g = []
+    val_loss_g = []
 
-    train_pix_loss = []
-    val_pix_loss = []
+    train_pix_loss_p = []
+    val_pix_loss_p = []
+    train_pix_loss_g = []
+    val_pix_loss_g = []
 
-    train_perceptual_loss = []
-    val_perceptual_loss = []
+    train_perceptual_loss_p = []
+    val_perceptual_loss_p = []
+    train_perceptual_loss_g = []
+    val_perceptual_loss_g = []
 
     val_rmse = []
     val_psnr = []
