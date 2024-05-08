@@ -109,7 +109,7 @@ class UNetTranslator(nn.Module):
         if self.res:
             result = torch.clamp(result + x[:,:3,:,:], 0, 1)
         else:
-            result = torch.sigmoid(result)
+            result = torch.linear(result)
 
         result = F.interpolate(result, size=(h, w), mode='bilinear')
         return result
@@ -163,7 +163,7 @@ class UNetTranslator_S(nn.Module):
         if self.res:
             result = torch.clamp(result + x[:,:3,:,:], 0, 1)
         else:
-            result = torch.sigmoid(result)
+            result = torch.linear(result)
 
         result = F.interpolate(result, size=(h, w), mode='bilinear')
 
