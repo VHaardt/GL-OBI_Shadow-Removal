@@ -23,7 +23,6 @@ def parse_args():
     parser.add_argument("--img_height", type=int, default=512, help="height of the images")
     parser.add_argument("--img_width", type=int, default=512, help="width of the images")
 
-    parser.add_argument("--task", type=str, default="sd", help="task to perform (shadow detection: sd, shadow removal: sr)")
     parser.add_argument("--model_size", type=str, default="S", help="size of the model (S, M, L)")
 
     parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
@@ -87,12 +86,8 @@ if __name__ == "__main__":
     with open(os.path.join(checkpoint_dir, "config.txt"), "w") as f:
         f.write(str(opt))
     
-    if opt.task == "sd":
-        input_channels = 3
-        output_channels = 1
-    else:
-        input_channels = 3
-        output_channels = 3
+    input_channels = 9
+    output_channels = 6
 
     # Define ResNet
     rnet = models.resnet101(pretrained=True) #may chage type of resnet
@@ -137,10 +132,10 @@ if __name__ == "__main__":
     scheduler_p = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
     
     # Define optimizer for Unet
-    optimizer_u = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-    decay_step_u = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
-    milestones_u = [me for me in range(opt.decay_epoch, opt.n_epochs, decay_step)]
-    scheduler_u = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+    optimizer_g = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+    decay_step_g = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
+    milestones_g = [me for me in range(opt.decay_epoch, opt.n_epochs, decay_step)]
+    scheduler_g = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
 
     Tensor = torch.cuda.FloatTensor if opt.gpu >= 0 else torch.FloatTensor
 
@@ -191,13 +186,20 @@ if __name__ == "__main__":
     best_loss = 1e3 # arbitrary large number
 
     for epoch in range(1, opt.n_epochs + 1):
-        train_epoch_loss = 0
-        train_epoch_pix_loss = 0
-        train_epoch_perceptual_loss = 0
+        train_epoch_loss_p = 0
+        train_epoch_pix_loss_p = 0
+        train_epoch_perceptual_loss_p = 0
+        
+        train_epoch_loss_g = 0
+        train_epoch_pix_loss_g = 0
+        train_epoch_perceptual_loss_g = 0
 
-        valid_epoch_loss = 0
-        valid_epoch_pix_loss = 0
-        valid_epoch_perceptual_loss = 0
+        valid_epoch_loss_p = 0
+        valid_epoch_pix_loss_p = 0
+        valid_epoch_perceptual_loss_p = 0
+        valid_epoch_loss_g = 0
+        valid_epoch_pix_loss_g = 0
+        valid_epoch_perceptual_loss_g = 0
 
         rmse_epoch = 0
         psnr_epoch = 0
@@ -205,22 +207,51 @@ if __name__ == "__main__":
         resnet = resnet.train()
         unet = unet.train()
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
-        for i, (shadow, shadow_free, _) in enumerate(train_loader):
+        for i, (shadow, shadow_free, mask) in enumerate(train_loader):
             inp = Variable(shadow.type(Tensor))
             gt = Variable(shadow_free.type(Tensor))
 
             optimizer_p.zero_grad()
             out_p = resnet(inp)
-            #######################################
             
-            pix_loss_p = criterion_pixelwise(out, gt)
-            perceptual_loss_p = criterion_perceptual(out, gt)
+            # parameter extractio n R_a, R_b, G_a, G_b, B_a, B_b
+            R_a = out_p[:, 0]  
+            R_b = out_p[:, 1] 
+            G_a = out_p[:, 2]
+            G_b = out_p[:, 3]
+            B_a = out_p[:, 4]
+            B_b = out_p[:, 5]
+        
+            for j in range(inp.size(0)):
+                transformed_img = exposureRGB(inp[j].cpu().numpy(), R_a[j].item(), R_b[j].item(), G_a[j].item(), G_b[j].item(), B_a[j].item(), B_b[j].item())
+                transformed_images.append(transformed_img)
 
-            loss = opt.pixel_weight * pix_loss + opt.perceptual_weight * perceptual_loss
+            transformed_images = torch.tensor(transformed_images, device=inp.device, dtype=inp.dtype)
+              
+            pix_loss_p = criterion_pixelwise(transformed_images[mask!=0], gt[mask!=0]) #calulate loss only in the shadow region
+            perceptual_loss_p = criterion_perceptual(transformed_images[mask!=0], gt[mask!=0]) #may want to erode the mask!!!
 
-            loss.backward()
-            optimizer.step()
+            loss_p = opt.pixel_weight * pix_loss_p + opt.perceptual_weight * perceptual_loss_p
+            loss_p.backward()
+            optimizer_p.step()
 
+            train_epoch_loss_p += loss_p.detach().item()
+            train_epoch_pix_loss_p += pix_loss_p.detach().item()
+            train_epoch_perceptual_loss_p += perceptual_loss_p.detach().item()
+
+            # Assume che mask abbia le stesse dimensioni di inp
+            R_a_mat = torch.where(mask == 0, torch.tensor(1.0), R_a.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+            R_b_mat = torch.where(mask == 0, torch.tensor(0.0), R_b.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+            G_a_mat = torch.where(mask == 0, torch.tensor(1.0), G_a.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+            G_b_mat = torch.where(mask == 0, torch.tensor(0.0), G_b.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+            B_a_mat = torch.where(mask == 0, torch.tensor(1.0), B_a.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+            B_b_mat = torch.where(mask == 0, torch.tensor(0.0), B_b.unsqueeze(1).unsqueeze(2).repeat(1, 1, inp.size(2), inp.size(3)))
+
+
+            optimizer_g.zero_grad()
+            n_inp = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
+            out_g = unet(n_inp)
+ 
             train_epoch_loss += loss.detach().item()
             train_epoch_pix_loss += pix_loss.detach().item()
             train_epoch_perceptual_loss += perceptual_loss.detach().item()
