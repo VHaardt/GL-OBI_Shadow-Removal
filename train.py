@@ -130,11 +130,17 @@ if __name__ == "__main__":
     PSNR_ = PSNR()
     RMSE_ = RMSE()
 
-    # Define optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-    decay_step = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
-    milestones = [me for me in range(opt.decay_epoch, opt.n_epochs, decay_step)]
-    scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+    # Define optimizer for Resnet
+    optimizer_p = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+    decay_step_p = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
+    milestones_p = [me for me in range(opt.decay_epoch, opt.n_epochs, decay_step)]
+    scheduler_p = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
+    
+    # Define optimizer for Unet
+    optimizer_u = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+    decay_step_u = (opt.n_epochs - opt.decay_epoch) // opt.decay_steps
+    milestones_u = [me for me in range(opt.decay_epoch, opt.n_epochs, decay_step)]
+    scheduler_u = MultiStepLR(optimizer, milestones=milestones, gamma=0.5)
 
     Tensor = torch.cuda.FloatTensor if opt.gpu >= 0 else torch.FloatTensor
 
@@ -196,16 +202,19 @@ if __name__ == "__main__":
         rmse_epoch = 0
         psnr_epoch = 0
 
-        model = model.train()
+        resnet = resnet.train()
+        unet = unet.train()
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
         for i, (shadow, shadow_free, _) in enumerate(train_loader):
             inp = Variable(shadow.type(Tensor))
             gt = Variable(shadow_free.type(Tensor))
 
-            optimizer.zero_grad()
-            out = model(inp)
-            pix_loss = criterion_pixelwise(out, gt)
-            perceptual_loss = criterion_perceptual(out, gt)
+            optimizer_p.zero_grad()
+            out_p = resnet(inp)
+            #######################################
+            
+            pix_loss_p = criterion_pixelwise(out, gt)
+            perceptual_loss_p = criterion_perceptual(out, gt)
 
             loss = opt.pixel_weight * pix_loss + opt.perceptual_weight * perceptual_loss
 
