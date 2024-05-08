@@ -249,8 +249,15 @@ if __name__ == "__main__":
 
 
             optimizer_g.zero_grad()
-            n_inp = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
-            out_g = unet(n_inp)
+            inp_g = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
+            out_g = unet(inp_g)
+
+            #pix_loss_g = criterion_pixelwise(transformed_images[mask!=0], gt[mask!=0]) #calulate loss only in the shadow region
+            #perceptual_loss_g = criterion_perceptual(transformed_images[mask!=0], gt[mask!=0]) #may want to erode the mask!!!
+
+            loss_p = opt.pixel_weight * pix_loss_p + opt.perceptual_weight * perceptual_loss_p
+            loss_p.backward()
+            optimizer_p.step()
  
             train_epoch_loss += loss.detach().item()
             train_epoch_pix_loss += pix_loss.detach().item()
