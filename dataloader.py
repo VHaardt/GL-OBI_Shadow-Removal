@@ -81,8 +81,7 @@ class ISTDDataset(data.Dataset):
         return shadow_free_image
 
     def __len__(self):
-        return len(self.shadow_images)
-    
+        return len(self.shadow_images) 
          
 class SBUDataset(data.Dataset):
     def __init__(self, root_dir, size=None, aug=False):

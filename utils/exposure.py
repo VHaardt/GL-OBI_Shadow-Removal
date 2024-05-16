@@ -1,7 +1,8 @@
 import numpy as np
+import torch
 
 def exposureRGB(img, R_a, R_b, G_a, G_b, B_a, B_b):
-    rgb_img = img.clone()
+    rgb_img = img.copy()
     rgb_img[:, :, 0] = (rgb_img[:, :, 0]*R_a) + R_b
     rgb_img[:, :, 1] = (rgb_img[:, :, 1]*G_a) + G_b
     rgb_img[:, :, 2] = (rgb_img[:, :, 2]*B_a) + B_b
@@ -10,7 +11,7 @@ def exposureRGB(img, R_a, R_b, G_a, G_b, B_a, B_b):
     
     return rgb_img
 
-def exposureRGB(inp, out_g):
+def exposureRGB_Tens(inp, out_g):
     # Splitting the output tensor into individual parameter tensors
     R_a = out_g[:, 0, :, :]
     R_b = out_g[:, 1, :, :]
@@ -27,8 +28,5 @@ def exposureRGB(inp, out_g):
     
     # Clipping the values to maintain the range [0, 1]
     rgb_img = torch.clamp(rgb_img, 0, 1)
-    
-    return rgb_img
-
     
     return rgb_img
