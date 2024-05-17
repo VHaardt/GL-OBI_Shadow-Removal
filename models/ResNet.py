@@ -1,4 +1,3 @@
-#new 2
 import torch
 import torch.nn as nn
 from torchvision.models import resnet101, resnet50
