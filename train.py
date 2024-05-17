@@ -1,3 +1,4 @@
+#new 2
 import argparse
 import os
 import torch
@@ -5,6 +6,7 @@ from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
 from dataloader import ISTDDataset
 from models.UNet import UNetTranslator, UNetTranslator_S
+from models.ResNet import CustomResNet101, CustomResNet50
 from torchvision.models import resnet101
 from torchvision.models.resnet import ResNet101_Weights
 from datetime import datetime
@@ -26,7 +28,9 @@ def parse_args():
     parser.add_argument("--img_height", type=int, default=512, help="height of the images")
     parser.add_argument("--img_width", type=int, default=512, help="width of the images")
 
-    parser.add_argument("--model_size", type=str, default="S", help="size of the model (S, M, L)")
+    parser.add_argument("--resnet_size", type=str, default="S", help="size of the model (S, M)")
+    parser.add_argument("--resnet_freeze", type=bool, default=False, help="freeze layers of resnet")
+    parser.add_argument("--unet_size", type=str, default="S", help="size of the model (S, M)")
 
     parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=4, help="size of the batches")
@@ -93,14 +97,14 @@ if __name__ == "__main__":
     output_channels = 6
 
     # Define ResNet
-    resnet = resnet101(weights=ResNet101_Weights.IMAGENET1K_V1)
-    num_features = resnet.fc.in_features
-    resnet.fc_custom = torch.nn.Linear(num_features, 6) #alpha and beta for 3 channel 
-    # may change linar, in to something with boundaries like (-0.5, 3)
-    resnet.to(device)
+    if opt.resnet_size == "S":
+        resnet = CustomResNet50(freeze = opt.resnet_freeze).to(device)
+    else:
+        resnet = CustomResNet101(freeze = opt.resnet_freeze).to(device)
     
+
     # Define UNet
-    if opt.model_size == "S":
+    if opt.unet_size == "S":
         unet = UNetTranslator_S(in_channels=9, out_channels=6, deconv=False, local=0, residual=False).to(device)
     else:
         unet = UNetTranslator(in_channels=9, out_channels=6, deconv=False, local=0, residual=False).to(device)
@@ -326,7 +330,7 @@ if __name__ == "__main__":
                         output = exposureRGB_Tens(inp, out_g)
                                     
                     pix_loss = criterion_pixelwise(output, gt)
-                    perceptual_loss = criterion_perceptual(output, gt)                    
+                    perceptual_loss = criterion_perceptual(output.clamp(0, 1), gt.clamp(0, 1))                    
                     loss = opt.pixel_weight * pix_loss + opt.perceptual_weight * perceptual_loss
 
                     psnr = PSNR_(output, gt)
@@ -341,7 +345,7 @@ if __name__ == "__main__":
                     pbar.update(val_dataset.__len__()/len(val_loader))
                 pbar.close()
 
-                if opt.save_images:
+                if opt.save_images and (epoch == 1 or epoch % 10 == 0):
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
