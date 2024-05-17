@@ -1,4 +1,3 @@
-#new 2
 import argparse
 import os
 import torch
