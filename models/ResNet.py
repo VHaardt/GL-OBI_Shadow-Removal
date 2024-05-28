@@ -22,17 +22,7 @@ class CustomResNet50(torch.nn.Module):
         self.resnet.fc = nn.Linear(num_features, 6)
 
     def forward(self, x):
-        x = self.resnet(x)  # Forward pass through the ResNet50 layers
-            
-        #channel1 = x[:, 0].clamp(1, 10)
-        #channel2 = x[:, 1].clamp(-0.5, 0.5)
-        #channel3 = x[:, 2].clamp(1, 10)
-        #channel4 = x[:, 3].clamp(-0.5, 0.5)
-        #channel5 = x[:, 4].clamp(1, 10)
-        #channel6 = x[:, 5].clamp(-0.5, 0.5)
-        
-        #x = torch.cat((channel1.unsqueeze(1), channel2.unsqueeze(1), channel3.unsqueeze(1),
-                    #channel4.unsqueeze(1), channel5.unsqueeze(1), channel6.unsqueeze(1)), dim=1) 
+        x = self.resnet(x)  # Forward pass through the ResNet50 layers 
         return x
     
 class CustomResNet101(torch.nn.Module):
@@ -52,17 +42,7 @@ class CustomResNet101(torch.nn.Module):
         self.resnet.fc = nn.Linear(num_features, 6)
 
     def forward(self, x):
-        x = self.resnet(x) 
-
-        channel1 = x[:, 0].clamp(1.0, 10.0)
-        channel2 = x[:, 1].clamp(-0.5, 0.5)
-        channel3 = x[:, 2].clamp(1.0, 10.0)
-        channel4 = x[:, 3].clamp(-0.5, 0.5)
-        channel5 = x[:, 4].clamp(1.0, 10.0)
-        channel6 = x[:, 5].clamp(-0.5, 0.5)
-        
-        x = torch.cat((channel1.unsqueeze(1), channel2.unsqueeze(1), channel3.unsqueeze(1),
-                    channel4.unsqueeze(1), channel5.unsqueeze(1), channel6.unsqueeze(1)), dim=1) 
+        x = self.resnet(x)  
         return x
 
 
