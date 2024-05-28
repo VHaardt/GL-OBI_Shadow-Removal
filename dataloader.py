@@ -6,6 +6,81 @@ import cv2
 from utils.utils_io import read_image
 import skimage
 
+import ipdb
+
+class WSRDDataset(data.Dataset):
+    def __init__(self, root_dir, size=None, aug=False, masks_precomp=False):
+        self.augment = aug
+        self.size = size
+        self.root_dir = root_dir
+        
+        self.shadow_images = os.listdir(os.path.join(root_dir, 'shadow_affected'))
+        self.shadow_free_images = os.listdir(os.path.join(root_dir, 'shadow_free'))
+        self.masks_precomp = masks_precomp
+        if self.masks_precomp:
+            self.shadow_masks = os.listdir(os.path.join(root_dir, 'shadow_masks'))
+
+
+    def __getitem__(self, index):
+        shadow_image = read_image(os.path.join(self.root_dir, 'shadow_affected', self.shadow_images[index]))
+        shadow_free_image = read_image(os.path.join(self.root_dir, 'shadow_free', self.shadow_free_images[index]))
+
+        if self.masks_precomp:
+            shadow_mask = read_image(os.path.join(self.root_dir, 'shadow_masks', self.shadow_masks[index]), grayscale=True)
+        else:
+            shadow_mask = self.compute_shadow_mask(shadow_image, shadow_free_image)
+        
+
+        if self.augment:
+            if random.random() < 0.5:
+                shadow_image = cv2.flip(shadow_image, 1)
+                shadow_free_image = cv2.flip(shadow_free_image, 1)
+                shadow_mask = cv2.flip(shadow_mask, 1)
+            if random.random() < 0.5:
+                shadow_image = cv2.flip(shadow_image, 0)
+                shadow_free_image = cv2.flip(shadow_free_image, 0)
+                shadow_mask = cv2.flip(shadow_mask, 0)
+            if random.random() < 0.5:
+                shadow_image = cv2.rotate(shadow_image, cv2.ROTATE_90_CLOCKWISE)
+                shadow_free_image = cv2.rotate(shadow_free_image, cv2.ROTATE_90_CLOCKWISE)
+                shadow_mask = cv2.rotate(shadow_mask, cv2.ROTATE_90_CLOCKWISE)
+        
+        if self.size is not None:
+            shadow_image = cv2.resize(shadow_image, self.size)
+            shadow_free_image = cv2.resize(shadow_free_image, self.size)
+            shadow_mask = cv2.resize(shadow_mask, self.size, interpolation=cv2.INTER_NEAREST)
+
+        
+        if len(shadow_mask.shape) == 2:
+            shadow_mask = np.expand_dims(shadow_mask, axis=2)
+        
+        shadow_image = np.transpose(shadow_image, (2, 0, 1))
+        shadow_free_image = np.transpose(shadow_free_image, (2, 0, 1))
+        shadow_mask = np.transpose(shadow_mask, (2, 0, 1))
+        
+        instance = {"shadow_image": shadow_image, "shadow_free_image": shadow_free_image, "shadow_mask": shadow_mask}
+
+        return instance
+
+    def compute_shadow_mask(self, shadow_image, shadow_free_image):
+        # convert to grayscale
+        shadow_image = skimage.color.rgb2gray(shadow_image)
+        shadow_free_image = skimage.color.rgb2gray(shadow_free_image)
+
+        # Blur the images
+        shadow_image = skimage.filters.gaussian(shadow_image, sigma=5)
+        shadow_free_image = skimage.filters.gaussian(shadow_free_image, sigma=5)
+
+        shadow_mask = np.abs(shadow_image - shadow_free_image)
+
+        # Binarize the mask using otsu thresholding
+        otsu_threshold = skimage.filters.threshold_otsu(shadow_mask)
+        shadow_mask = np.where(shadow_mask > otsu_threshold, 1, 0).astype(np.float32)
+        
+        return shadow_mask
+
+    def __len__(self):
+        return len(self.shadow_images)
 
 
 class ISTDDataset(data.Dataset):
@@ -81,7 +156,8 @@ class ISTDDataset(data.Dataset):
         return shadow_free_image
 
     def __len__(self):
-        return len(self.shadow_images) 
+        return len(self.shadow_images)
+    
          
 class SBUDataset(data.Dataset):
     def __init__(self, root_dir, size=None, aug=False):
@@ -97,3 +173,37 @@ class SBUDataset(data.Dataset):
 
         # self.shadow_images = self.shadow_images[:100]
         # self.shadow_masks = self.shadow_masks[:100]
+
+
+    def __getitem__(self, index):
+
+        shadow_image = read_image(os.path.join(self.root_dir, "ShadowImages", self.shadow_images[index]))
+        shadow_mask = np.round(read_image(os.path.join(self.root_dir, "ShadowMasks", self.shadow_masks[index]), grayscale=True))
+
+        if self.augment:
+            if random.random() < 0.5:
+                shadow_image = cv2.flip(shadow_image, 1)
+                shadow_mask = cv2.flip(shadow_mask, 1)
+            if random.random() < 0.5:
+                shadow_image = cv2.flip(shadow_image, 0)
+                shadow_mask = cv2.flip(shadow_mask, 0)
+            if random.random() < 0.5:
+                shadow_image = cv2.rotate(shadow_image, cv2.ROTATE_90_CLOCKWISE)
+                shadow_mask = cv2.rotate(shadow_mask, cv2.ROTATE_90_CLOCKWISE)
+        
+        if self.size is not None:
+            shadow_image = cv2.resize(shadow_image, self.size)
+            shadow_mask = cv2.resize(shadow_mask, self.size, interpolation=cv2.INTER_NEAREST)
+
+        if len(shadow_mask.shape) == 2:
+            shadow_mask = np.expand_dims(shadow_mask, axis=2)
+        
+        shadow_image = np.transpose(shadow_image, (2, 0, 1))
+        shadow_mask = np.transpose(shadow_mask, (2, 0, 1))
+        
+        instance = {"shadow_image": shadow_image, "shadow_mask": shadow_mask}
+        
+        return instance
+    
+    def __len__(self):
+        return len(self.shadow_images)
