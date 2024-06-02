@@ -17,6 +17,7 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity as LPI
 import tqdm
 import cv2
 import json
+import requests
 
 import ipdb
 
@@ -31,6 +32,7 @@ def parse_args():
     parser.add_argument("--resnet_freeze", type=bool, default=False, help="freeze layers of resnet")
     parser.add_argument("--unet_size", type=str, default="S", help="size of the model (S, M)")
 
+    parser.add_argument("--resnet_epochs", type=int, default=10, help="number of epochs for pretrining of resnet of training")
     parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=4, help="size of the batches")
     parser.add_argument("--n_workers", type=int, default=4, help="number of cpu threads to use during batch generation")
@@ -73,6 +75,18 @@ def weights_init_normal(m):
     elif classname.find("BatchNorm2d") != -1:
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
+
+#Delete this in the final version
+def send_telegram_notification(message):
+    bot_token = '7363314579:AAF5x5LkQrKTk7zJjHh-s5SKUnOWMtitVxs'
+    chat_id = '5757693999'
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    payload = {
+        'chat_id': chat_id,
+        'text': message
+    }
+    response = requests.post(url, json=payload)
+    return response.json()
 
 
 if __name__ == "__main__":
@@ -187,6 +201,44 @@ if __name__ == "__main__":
 
     best_loss = 1e3 # arbitrary large number
 
+
+    # =================================================================================== #
+    #                             1. Pre-training of ResNet                               #
+    # =================================================================================== #
+
+    #pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
+    for epoch in range(1, opt.resnet_epochs + 1):
+        resnet.train()
+        pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"ResNet pre-training Epoch {epoch}/{opt.resnet_epochs}")
+        for i, data in enumerate(train_loader):
+            shadow = data['shadow_image']
+            shadow_free = data['shadow_free_image']
+            mask = data['shadow_mask']
+
+            inp = shadow.type(Tensor).to(device)
+            gt = shadow_free.type(Tensor).to(device)
+            mask = mask.type(Tensor).to(device)
+
+            optimizer_p.zero_grad()
+            out_p = resnet(inp)
+
+            transformed_images = exposureRGB(inp, out_p)
+
+            mask_exp = mask.expand(-1, 3, -1, -1)
+            pix_loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
+
+            loss_p = opt.pixel_weight * pix_loss_p  # + opt.perceptual_weight * perceptual_loss_p
+            loss_p.backward()  
+            optimizer_p.step()
+
+            pbar.update(opt.batch_size)
+        pbar.close()
+
+
+    # =================================================================================== #
+    #                             2. Training together ResNet and UNet                    #
+    # =================================================================================== #
+
     for epoch in range(1, opt.n_epochs + 1):
         train_epoch_loss_p = 0
         train_epoch_pix_loss_p = 0
@@ -204,11 +256,11 @@ if __name__ == "__main__":
         rmse_epoch = 0
         psnr_epoch = 0
 
-        resnet = resnet.train()
-        unet = unet.train()
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
-
         for i, data in enumerate(train_loader):
+            resnet.train()
+            unet.eval()
+
             shadow = data['shadow_image']
             shadow_free = data['shadow_free_image']
             mask = data['shadow_mask']
@@ -227,7 +279,7 @@ if __name__ == "__main__":
             pix_loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
 
             loss_p = opt.pixel_weight * pix_loss_p  # + opt.perceptual_weight * perceptual_loss_p
-            loss_p.backward()  # Retain graph for the next backward call
+            loss_p.backward(retain_graph=True)  #serve???
             optimizer_p.step()
 
             train_epoch_loss_p += loss_p.detach().item()
@@ -247,9 +299,12 @@ if __name__ == "__main__":
 
             inp_g = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
 
+            resnet.eval()
+            unet.train()
+
             optimizer_g.zero_grad()
 
-            out_g = unet(inp_g.detach()) #se no errore: Trying to backward through the graph a second time (or directly access saved tensors after they have already been freed).
+            out_g = unet(inp_g.detach()) #serve detach???
 
             output = exposureRGB_Tens(inp, out_g)
 
@@ -373,6 +428,19 @@ if __name__ == "__main__":
                 
             #print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss: {val_pix_loss[-1]}] [Valid Perceptual Loss: {val_perceptual_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
             print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss ResNet: {val_pix_loss_p[-1]}] [Valid Pix Loss UNet: {val_pix_loss_g[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
+
+            #remove in final version
+            if epoch == round(0.25 * opt.n_epochs):
+                send_telegram_notification(f"25% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :(")
+            elif epoch == round(0.5 * opt.n_epochs):
+                send_telegram_notification(f"50% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :|")
+            elif epoch == round(0.75 * opt.n_epochs):
+                send_telegram_notification(f"75% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :)")
+            elif (opt.n_epochs - epoch) == 10 and opt.n_epochs != 40:
+                send_telegram_notification(f"Only {opt.n_epochs - epoch} epochs remain. :))")
+
+
+
             
         # Save metrics to disk
         metrics_dict = {
@@ -391,4 +459,5 @@ if __name__ == "__main__":
 
     print("Training finished")
 
-    
+#Remove in the final version
+send_telegram_notification("Hey, Training process is complete!")    
