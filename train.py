@@ -32,7 +32,8 @@ def parse_args():
     parser.add_argument("--resnet_freeze", type=bool, default=False, help="freeze layers of resnet")
     parser.add_argument("--unet_size", type=str, default="S", help="size of the model (S, M)")
 
-    parser.add_argument("--resnet_epochs", type=int, default=10, help="number of epochs for pretrining of resnet of training")
+    parser.add_argument("--resnet_epochs", type=int, default=10, help="number of epochs for pretrining of resnet")
+    parser.add_argument("--unet_epochs", type=int, default=10, help="number of epochs of n_epochs in which unet treain alone")
     parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=4, help="size of the batches")
     parser.add_argument("--n_workers", type=int, default=4, help="number of cpu threads to use during batch generation")
@@ -45,8 +46,8 @@ def parse_args():
     parser.add_argument("--decay_epoch", type=int, default=400, help="epoch from which to start lr decay")
     parser.add_argument("--decay_steps", type=int, default=4, help="number of step decays")
 
-    parser.add_argument("--pixel_weight", type=float, default=1, help="weight of the pixelwise loss")
-    parser.add_argument("--perceptual_weight", type=float, default=0.1, help="weight of the perceptual loss")
+    #parser.add_argument("--pixel_weight", type=float, default=1, help="weight of the pixelwise loss")
+    #parser.add_argument("--perceptual_weight", type=float, default=0.1, help="weight of the perceptual loss")
 
     parser.add_argument("--valid_checkpoint", type=int, default=1, help="number of epochs between each validation")
     parser.add_argument("--checkpoint_mode", type=str, default="b/l", help="mode for saving checkpoints: b/l (best/last), all (all epochs), n (none)")
@@ -186,15 +187,16 @@ if __name__ == "__main__":
     train_loss_p = []
     train_loss_g = []
     val_loss = []
+    val_loss_p = []
 
-    train_pix_loss_p = []
-    train_pix_loss_g = []
-    val_pix_loss_p = []
-    val_pix_loss_g = []
+    #train_pix_loss_p = []
+    #train_pix_loss_g = []
+    #val_pix_loss_p = []
+    #val_pix_loss_g = []
 
-    train_perceptual_loss_p = []
-    train_perceptual_loss_g = []
-    val_perceptual_loss = []
+    #train_perceptual_loss_p = []
+    #train_perceptual_loss_g = []
+    #val_perceptual_loss = []
 
     val_rmse = []
     val_psnr = []
@@ -205,8 +207,6 @@ if __name__ == "__main__":
     # =================================================================================== #
     #                             1. Pre-training of ResNet                               #
     # =================================================================================== #
-
-    #pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
     for epoch in range(1, opt.resnet_epochs + 1):
         resnet.train()
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"ResNet pre-training Epoch {epoch}/{opt.resnet_epochs}")
@@ -225,9 +225,8 @@ if __name__ == "__main__":
             transformed_images = exposureRGB(inp, out_p)
 
             mask_exp = mask.expand(-1, 3, -1, -1)
-            pix_loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
+            loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
 
-            loss_p = opt.pixel_weight * pix_loss_p  # + opt.perceptual_weight * perceptual_loss_p
             loss_p.backward()  
             optimizer_p.step()
 
@@ -241,26 +240,32 @@ if __name__ == "__main__":
 
     for epoch in range(1, opt.n_epochs + 1):
         train_epoch_loss_p = 0
-        train_epoch_pix_loss_p = 0
-        train_epoch_perceptual_loss_p = 0
+        #train_epoch_pix_loss_p = 0
+        #train_epoch_perceptual_loss_p = 0
         
         train_epoch_loss_g = 0
-        train_epoch_pix_loss_g = 0
-        train_epoch_perceptual_loss_g = 0
+        #train_epoch_pix_loss_g = 0
+        #train_epoch_perceptual_loss_g = 0
 
         valid_epoch_loss = 0
-        valid_epoch_pix_loss_p = 0
-        valid_epoch_pix_loss_g = 0
-        valid_epoch_perceptual_loss = 0
+        valid_epoch_loss_p = 0
+        #valid_epoch_pix_loss_p = 0
+        #valid_epoch_pix_loss_g = 0
+        #valid_epoch_perceptual_loss = 0
 
         rmse_epoch = 0
         psnr_epoch = 0
 
         pbar = tqdm.tqdm(total=train_dataset.__len__(), desc=f"Training Epoch {epoch}/{opt.n_epochs}")
-        for i, data in enumerate(train_loader):
-            resnet.train()
-            unet.eval()
 
+        resnet.train()
+        unet.train()
+
+        if epoch < opt.unet_epochs:
+            for param in resnet.parameters():
+                    param.requires_grad = False
+        
+        for i, data in enumerate(train_loader):
             shadow = data['shadow_image']
             shadow_free = data['shadow_free_image']
             mask = data['shadow_mask']
@@ -269,26 +274,15 @@ if __name__ == "__main__":
             gt = shadow_free.type(Tensor).to(device)
             mask = mask.type(Tensor).to(device)
 
-            # ResNet model operations
-            optimizer_p.zero_grad()
+            optimizer_g.zero_grad()
             out_p = resnet(inp)
 
             transformed_images = exposureRGB(inp, out_p)
 
             mask_exp = mask.expand(-1, 3, -1, -1)
-            pix_loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
-
-            loss_p = opt.pixel_weight * pix_loss_p  # + opt.perceptual_weight * perceptual_loss_p
-            loss_p.backward(retain_graph=True)  #serve???
-            optimizer_p.step()
-
+            loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
             train_epoch_loss_p += loss_p.detach().item()
-            train_epoch_pix_loss_p += pix_loss_p.detach().item()
-            # train_epoch_perceptual_loss_p += perceptual_loss_p.detach().item()
 
-            del transformed_images, pix_loss_p, mask_exp  # perceptual_loss_p, mask_exp
-
-            # Assume mask has the same dimensions as inp
             # Change is only in the shadow, the rest is 1 if alpha 0 if beta
             R_a_mat = torch.where(mask == 0, torch.tensor(1.0).to(device), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             R_b_mat = torch.where(mask == 0, torch.tensor(0.0).to(device), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -299,48 +293,42 @@ if __name__ == "__main__":
 
             inp_g = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
 
-            resnet.eval()
-            unet.train()
-
-            optimizer_g.zero_grad()
-
-            out_g = unet(inp_g.detach()) #serve detach???
+            out_g = unet(inp_g)
 
             output = exposureRGB_Tens(inp, out_g)
 
-            pix_loss_g = criterion_pixelwise(output, gt)  # + criterion_perceptual(output.clamp(0, 1), gt.clamp(0, 1))
+            loss_g = criterion_pixelwise(output, gt)
 
-            loss_g = opt.pixel_weight * pix_loss_g  # + opt.perceptual_weight * perceptual_loss_g
+            #loss_g = opt.pixel_weight * pix_loss_g + opt.perceptual_weight * perceptual_loss_g
             loss_g.backward()
             optimizer_g.step()
 
             train_epoch_loss_g += loss_g.detach().item()
-            train_epoch_pix_loss_g += pix_loss_g.detach().item()
+            #train_epoch_pix_loss_g += pix_loss_g.detach().item()
             # train_epoch_perceptual_loss_g += perceptual_loss_g.detach().item()
-
-            # Clean up to prevent any retained graph components
-            del inp_g, out_g, output, pix_loss_g  # , perceptual_loss_g
-            torch.cuda.empty_cache()
+            #torch.cuda.empty_cache() #non dovrebbe servire
 
             pbar.update(opt.batch_size)
 
         pbar.close()
 
         train_loss_p.append(train_epoch_loss_p / len(train_loader))
-        train_pix_loss_p.append(train_epoch_pix_loss_p / len(train_loader))
+        #train_pix_loss_p.append(train_epoch_pix_loss_p / len(train_loader))
         #train_perceptual_loss_p.append(train_epoch_perceptual_loss_p / len(train_loader))
         
         train_loss_g.append(train_epoch_loss_g / len(train_loader))
-        train_pix_loss_g.append(train_epoch_pix_loss_g / len(train_loader))
+        #train_pix_loss_g.append(train_epoch_pix_loss_g / len(train_loader))
         #train_perceptual_loss_g.append(train_epoch_perceptual_loss_g / len(train_loader))
 
-        print(f"[ResNet -> Train Loss: {train_epoch_loss_p / len(train_loader)}] [Train Pix Loss: {train_epoch_pix_loss_p / len(train_loader)}] ")#[Train Perceptual Loss: {train_epoch_perceptual_loss_p / len(train_loader)}]")
-        print(f"[UNet -> Train Loss: {train_epoch_loss_g / len(train_loader)}] [Train Pix Loss: {train_epoch_pix_loss_g / len(train_loader)}] ")#[Train Perceptual Loss: {train_epoch_perceptual_loss_g / len(train_loader)}]")
+        print(f"[ResNet -> Train Loss: {train_epoch_loss_p / len(train_loader)}] ")#[Train Pix Loss: {train_epoch_pix_loss_p / len(train_loader)}] [Train Perceptual Loss: {train_epoch_perceptual_loss_p / len(train_loader)}]")
+        print(f"[UNet -> Train Loss: {train_epoch_loss_g / len(train_loader)}] ")#[Train Pix Loss: {train_epoch_pix_loss_g / len(train_loader)}] ")#[Train Perceptual Loss: {train_epoch_perceptual_loss_g / len(train_loader)}]")
 
         scheduler_p.step()
         scheduler_g.step()
 
-        # validation phase
+        # =================================================================================== #
+        #                             3. Validation                                           #
+        # =================================================================================== #
         if (epoch-1) % opt.valid_checkpoint == 0:
             with torch.no_grad():
                 resnet = resnet.eval()
@@ -372,17 +360,18 @@ if __name__ == "__main__":
                         out_g = unet(inp_g)
                         output = exposureRGB_Tens(inp, out_g)
                                     
-                    pix_loss_vp = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])
-                    pix_loss = criterion_pixelwise(output, gt)
+                    loss_p = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])
+                    loss = criterion_pixelwise(output, gt)
                     #perceptual_loss = criterion_perceptual(output.clamp(0, 1), gt.clamp(0, 1))                    
-                    loss = opt.pixel_weight * pix_loss #+ opt.perceptual_weight * perceptual_loss
+                    #loss = opt.pixel_weight * pix_loss #+ opt.perceptual_weight * perceptual_loss
 
                     psnr = PSNR_(output, gt)
                     rmse = RMSE_(output, gt)
                     
-                    valid_epoch_pix_loss_p += pix_loss_vp.detach().item()
-                    valid_epoch_pix_loss_g += pix_loss.detach().item()
+                    #valid_epoch_pix_loss_p += pix_loss_vp.detach().item()
+                    #valid_epoch_pix_loss_g += pix_loss.detach().item()
                     #valid_epoch_perceptual_loss += perceptual_loss.detach().item()
+                    valid_epoch_loss_p += loss_p.detach().item()
                     valid_epoch_loss += loss.detach().item()
 
                     psnr_epoch += psnr.detach().item()
@@ -395,16 +384,18 @@ if __name__ == "__main__":
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                        im_exp = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_pred = (output[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
-                        im_conc = np.concatenate((im_input, im_pred, im_gt), axis=1)
+                        im_conc = np.concatenate((im_input, im_exp, im_pred, im_gt), axis=1)
                         im_conc = cv2.cvtColor(im_conc, cv2.COLOR_RGB2BGR)
                         # Save image to disk
                         cv2.imwrite(os.path.join(checkpoint_dir, "images", f"epoch_{epoch}_img_{count}.png"), im_conc)
 
                 val_loss.append(valid_epoch_loss / len(val_loader))
-                val_pix_loss_g.append(valid_epoch_pix_loss_g / len(val_loader))
-                val_pix_loss_p.append(valid_epoch_pix_loss_p / len(val_loader))
+                val_loss_p.append(valid_epoch_loss_p / len(val_loader))
+                #val_pix_loss_g.append(valid_epoch_pix_loss_g / len(val_loader))
+                #val_pix_loss_p.append(valid_epoch_pix_loss_p / len(val_loader))
                 #val_perceptual_loss.append(valid_epoch_perceptual_loss / len(val_loader))
                 val_rmse.append(rmse_epoch / len(val_loader))
                 val_psnr.append(psnr_epoch / len(val_loader))
@@ -427,7 +418,7 @@ if __name__ == "__main__":
 
                 
             #print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss: {val_pix_loss[-1]}] [Valid Perceptual Loss: {val_perceptual_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
-            print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss ResNet: {val_pix_loss_p[-1]}] [Valid Pix Loss UNet: {val_pix_loss_g[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
+            print(f"[Valid Loss: {val_loss[-1]}] [Valid Pix Loss ResNet: {val_loss_p[-1]}] ")#[Valid Pix Loss UNet: {val_pix_loss_g[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]")
 
             #remove in final version
             if epoch == round(0.25 * opt.n_epochs):
@@ -446,6 +437,7 @@ if __name__ == "__main__":
         metrics_dict = {
             "train_loss_resnet": train_loss_p,
             "train_loss_unet": train_loss_g,
+            "val_loss-resnet": val_loss_p,
             "val_loss-unet": val_loss,
             #"train_pix_loss_unet": train_pix_loss_g,
             #"val_pix_loss_unet": val_pix_loss,
