@@ -350,12 +350,12 @@ if __name__ == "__main__":
                         transformed_images = exposureRGB(inp, out_p)
                         mask_exp = mask.expand(-1, 3, -1, -1)
 
-                        R_a_mat = torch.where(mask == 0, torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                        R_b_mat = torch.where(mask == 0, torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                        G_a_mat = torch.where(mask == 0, torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                        G_b_mat = torch.where(mask == 0, torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                        B_a_mat = torch.where(mask == 0, torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
-                        B_b_mat = torch.where(mask == 0, torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                         inp_g = torch.cat((inp, R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
                         out_g = unet(inp_g)
                         output = exposureRGB_Tens(inp, out_g)
@@ -387,6 +387,12 @@ if __name__ == "__main__":
                         im_exp = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_pred = (output[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+
+                        im_input = np.clip(im_input, 0, 255) #inserimento per rimuovere astrazioni... CONTROLLARE
+                        im_exp = np.clip(im_exp, 0, 255)
+                        im_pred = np.clip(im_pred, 0, 255)
+                        im_gt = np.clip(im_gt, 0, 255)
+                        
                         im_conc = np.concatenate((im_input, im_exp, im_pred, im_gt), axis=1)
                         im_conc = cv2.cvtColor(im_conc, cv2.COLOR_RGB2BGR)
                         # Save image to disk

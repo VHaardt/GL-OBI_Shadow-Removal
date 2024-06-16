@@ -142,8 +142,8 @@ if __name__ == "__main__":
 
     # Train and test on the same data
     if "ISTD" in opt.dataset_path:
-        train_dataset = ISTDDataset(os.path.join(opt.dataset_path, "train"), size=(opt.img_height, opt.img_width), aug=True, fix_color=True)
-        val_dataset = ISTDDataset(os.path.join(opt.dataset_path, "train"), aug=False, fix_color=True)
+        train_dataset = ISTDDataset(os.path.join(opt.dataset_path, "test"), size=(opt.img_height, opt.img_width), aug=True, fix_color=True)
+        val_dataset = ISTDDataset(os.path.join(opt.dataset_path, "test"), aug=False, fix_color=True)
 
     g = torch.Generator()
     g.manual_seed(42)
@@ -204,6 +204,7 @@ if __name__ == "__main__":
             transformed_images = exposureRGB(inp, out_p)
 
             mask_exp = mask.expand(-1, 3, -1, -1)
+            
             loss = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])  # Calculate loss only in the shadow region
 
             loss.backward()  
@@ -235,16 +236,28 @@ if __name__ == "__main__":
                     gt = Variable(shadow_free.type(Tensor))
                     mask = Variable(mask.type(Tensor))
 
+                    #print(torch.unique(mask))
+
                     d_type = "cuda" if torch.cuda.is_available() else "cpu"
                     with torch.autocast(device_type=d_type):
                         out_p = resnet(inp)
                         transformed_images = exposureRGB(inp, out_p)
                         mask_exp = mask.expand(-1, 3, -1, -1)
+
+                        #function to create image where shadow part is form resnet, non shadow part is form input.
+                        R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        G_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 3].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        B_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 4].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        B_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 5].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
+                        inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
+                        innested_img = exposureRGB_Tens(inp, inp_g)
                                       
                     loss = criterion_pixelwise(transformed_images[mask_exp != 0], gt[mask_exp != 0])
 
-                    psnr = PSNR_(transformed_images, gt)
-                    rmse = RMSE_(transformed_images, gt)
+                    psnr = PSNR_(innested_img, gt)
+                    rmse = RMSE_(innested_img, gt)
                     
                     pretrain_valid_epoch_loss += loss.detach().item()
 
@@ -259,8 +272,15 @@ if __name__ == "__main__":
                     for count in range(len(shadow)):
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_pred = (transformed_images[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                        im_innest = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
-                        im_conc = np.concatenate((im_input, im_pred, im_gt), axis=1)
+
+                        im_input = np.clip(im_input, 0, 255) #inserimento per rimuovere astrazioni... CONTROLLARE
+                        im_pred = np.clip(im_pred, 0, 255)
+                        im_innest = np.clip(im_innest, 0, 255)
+                        im_gt = np.clip(im_gt, 0, 255)
+
+                        im_conc = np.concatenate((im_input, im_pred, im_innest, im_gt), axis=1)
                         im_conc = cv2.cvtColor(im_conc, cv2.COLOR_RGB2BGR)
                         # Save image to disk
                         cv2.imwrite(os.path.join(checkpoint_dir, "images", f"epoch_{epoch}_img_{count}.png"), im_conc)
@@ -302,7 +322,7 @@ if __name__ == "__main__":
         # Save metrics to disk
         metrics_dict = {
             "train_loss_resnet": pretrain_loss,
-            "val_loss-unet": pretrain_val_loss,
+            "val_loss_resnet": pretrain_val_loss,
             "RMSE": pretrain_val_rmse,
             "PSNR": pretrain_val_psnr
         }
