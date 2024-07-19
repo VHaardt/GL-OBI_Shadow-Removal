@@ -3,7 +3,7 @@ import os
 import torch
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
-from dataloader import ISTDDataset
+from test_scripts.dataloader import ISTDDataset
 from models.UNet import UNetTranslator, UNetTranslator_S
 from models.ResNet import CustomResNet101, CustomResNet50
 from torchvision.models import resnet101

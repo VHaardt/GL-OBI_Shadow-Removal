@@ -47,13 +47,13 @@ class UNetDecompress(nn.Module):
         f = self.model(x)
         o = torch.cat((f, skip_input), 1)
         return o
- 
+
 
 class UNetTranslator(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, deconv=False, local=0, residual=True):
+    def __init__(self, in_channels=3, out_channels=3, deconv=False, local=0):
         self.local_transform = local
         super(UNetTranslator, self).__init__()
-        self.res = residual
+        self.out_channels = out_channels
 
         self.down1 = UNetCompress(in_channels, 64, kernel_size=4, normalize=False)
         self.down2 = UNetCompress(64, 128)
@@ -106,10 +106,7 @@ class UNetTranslator(nn.Module):
         u7 = self.up7(u6, d1)
         result = self.final(u7)
 
-        if self.res:
-            result = torch.clamp(result + x[:,:3,:,:], 0, 1)
-        else:
-            result = torch.linear(result)
+        #result = torch.linear(result)
 
         result = F.interpolate(result, size=(h, w), mode='bilinear')
         return result
@@ -119,10 +116,10 @@ class UNetTranslator_S(nn.Module):
     """
         Small version of the UNetTranslator (4 layers instead of 8)
     """
-    def __init__(self, in_channels=3, out_channels=3, deconv=False, local=0, residual=True):
+    def __init__(self, in_channels=3, out_channels=3, deconv=False, local=0):
         self.local_transform = local
         super(UNetTranslator_S, self).__init__()
-        self.res = residual
+        self.out_channels = out_channels
         
         self.down1 = UNetCompress(in_channels, 64, kernel_size=4, normalize=False)
         self.down2 = UNetCompress(64, 128)
@@ -160,12 +157,7 @@ class UNetTranslator_S(nn.Module):
         u3 = self.up3(u2, d1)
         result = self.final(u3)
 
-        if self.res:
-            result = torch.clamp(result + x[:,:3,:,:], 0, 1)
-        else:
-            #result = nn.Linear(result) #CONTROLLARE SE TOGLIERE
-            pass
-
+        #result = nn.Linear(result) #CONTROLLARE SE TOGLIERE
         result = F.interpolate(result, size=(h, w), mode='bilinear')
 
         return result
