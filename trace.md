@@ -17,6 +17,16 @@
     - loss: L1(shadow)
 * Esp_E: Decay corretto 
     -loss: L1(shadow) + 0.5 LPIPS(crop) con blur giusto
+* ResNet_new_1:
+    - non più I_ns = a*I_s + b  ->  I_ns = b+(I_s-mu)(a/sd)
+    - loss: L1(a|a_gt)+L1(b|b_gt)
+* ResNet_new_2: uguale a ResNet_new_1
+    - loss: 0.5 L1(a|a_gt)+L1(b|b_gt)
+* Esp_fin_4_res:
+    - input img corretta con parametri da contorno + ombra erosa
+    - loss: l1 tutta limmagine
+    - (ResNet_train_2)
+
 
 ## UNet
 * UNET_esp_A:
@@ -71,3 +81,15 @@
     - input: img + og_input + penumbra
     - out: 3ch non vincolati, da applicare solo all ombra
     - loss: L1(shadow) + 0.5 L1(penumbra)
+* UNET_solo_AISTD: data ISTD+
+    - input: og_input + penumbra
+    - out: 6ch nuova mappa per input
+    - loss: L1(shadow) + 0.5 L1(penumbra)
+* UNET_solo_ISTD: data ISTD
+    - input: og_input + penumbra
+    - out: 6ch nuova mappa per input
+    - loss: L1(shadow) + 0.5 L1(penumbra) + 0.4 LPIPS(all)
+* UNET_exp_1:
+    - input: exp_img + penumbra
+    - out: 3ch non vincolati, da applicare solo all ombra
+    - loss: L1(shadow) + 0.5 L1(penumbra) + 0.4 LPIPS(all)

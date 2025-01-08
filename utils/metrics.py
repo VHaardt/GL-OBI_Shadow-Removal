@@ -15,6 +15,7 @@ class PSNR():
         res = self.adjust_dimensions(res)
         
         mse = torch.mean((ref - res) ** 2, dim=(1, 2, 3)) # mse for each element in the batch (b, c, h, w)
+        mse = torch.clamp(mse, min=1e-5)
         psnr = 10 * torch.log10(1 / mse) # psnr for each mse in the batch
 
         return torch.mean(psnr)
@@ -58,6 +59,7 @@ class RMSE():
         res = self.adjust_dimensions(res)
         
         mse = torch.mean((ref - res) ** 2, dim=(1, 2, 3)) # mse for each element in the batch (b, c, h, w)
+        mse = torch.clamp(mse, min=1e-10)
         rmse = torch.sqrt(mse) # rmse for each mse in the batch
 
         return torch.mean(rmse)

@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
-from dataloader import ISTDDataset
+from test_scripts.dataloader_old import ISTDDataset
 from models.ResNet import CustomResNet101, CustomResNet50
 from models.UNet import UNetTranslator_S, UNetTranslator
 from datetime import datetime

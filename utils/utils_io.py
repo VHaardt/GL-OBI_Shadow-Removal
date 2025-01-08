@@ -19,7 +19,6 @@ def remove_small_objects(mask, min_size):
     
     return output_mask
 
-
 def fill_small_holes(mask, max_size):
     inverted_mask = np.logical_not(mask)
     labeled_holes, num_features = label(inverted_mask)

@@ -6,13 +6,13 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
-from dataloader import ISTDDataset
+from test_scripts.dataloader_old import ISTDDataset
 from models.ResNet import CustomResNet101, CustomResNet50
 from models.UNet import UNetTranslator_S, UNetTranslator
 from datetime import datetime
 from utils.metrics import PSNR, RMSE
 from utils.exposure import exposureRGB, exposureRGB_Tens, exposure_3ch
-from utils.blurring import blur_image_border, dilate_erode_mask
+from utils.blurring import blur_image_border, dilate_erode_mask, penumbra
 import numpy as np
 import random
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity as LPIPS
@@ -213,17 +213,22 @@ if __name__ == "__main__":
             shadow = data['shadow_image']
             shadow_free = data['shadow_free_image']
             mask = data['shadow_mask']
-            crop_coordinate = data['crop_coordinate']
+            #crop_coordinate = data['crop_coordinate']
+            cont_mask = data['contour_mask']
+            #exp_img = data['exposed_image']
 
             inp = shadow.type(Tensor).to(device)
             gt = shadow_free.type(Tensor).to(device)
             mask = mask.type(Tensor).to(device)
-            crop_coordinate = crop_coordinate.type(Tensor).to(device)
-            gt = torch.clamp(gt, 0, 1)
+            #crop_coordinate = crop_coordinate.type(Tensor).to(device)
+            cont_mask = cont_mask.type(Tensor).unsqueeze(1).to(device)
+            #exp_img = exp_img.type(Tensor).to(device)
 
             out_p = resnet(inp)
 
             ##
+            mask_exp = mask.expand(-1, 3, -1, -1)
+
             R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
             G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -233,18 +238,30 @@ if __name__ == "__main__":
             inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
             innested_img = exposureRGB_Tens(inp, inp_g)
 
-            #mask, _ = dilate_erode_mask(mask, 5) #allargo la mask di 5px per 
+            penumbra_tens = torch.empty_like(mask)
+            for i in range(mask.shape[0]):
+                penumbra_mask = penumbra(mask[i])
+                penumbra_tens[i, :, :, :] = penumbra_mask
+
+            pen_mask = torch.clamp(mask + penumbra_tens, 0, 1)
+
+            penumbra_tens_exp = penumbra_tens.expand(-1, 3, -1, -1) 
             mask_exp = mask.expand(-1, 3, -1, -1)
-            inp_u = torch.cat((innested_img, mask), dim = 1) #tolta masckera
+            pen_mask_exp = pen_mask_exp = pen_mask.expand(-1, 3, -1, -1)
+
+            inp_u = torch.cat((innested_img, pen_mask), dim = 1) #tolta masckera messa mask+pen
 
             optimizer.zero_grad()
             out_u = unet(inp_u)
 
             out_f = exposure_3ch(innested_img, out_u)
 
-            out_f = torch.clamp(out_f, 0, 1) #clippo per la loss
+            out_fin = torch.where(pen_mask == 0, inp, out_f) #innested only in shadow+penombra region
 
-            ##LOSS PART
+            #out_fin = torch.clamp(out_fin, 0, 1)
+            #gt = torch.clamp(gt, 0, 1) #clippo per la loss
+
+            '''##LOSS PART
             l_crop = []
             for j in range(out_f.shape[0]):
                 a = out_f[j].clone()
@@ -257,12 +274,12 @@ if __name__ == "__main__":
                 #lpips = criterion_perceptual(crop_img, crop_gt) ##Clamp
                 loss_crop = criterion_pixelwise(crop_img, crop_gt)
                 l_crop.append(loss_crop)
-            c_loss = torch.stack(l_crop).mean()
+            c_loss = torch.stack(l_crop).mean()'''
             
             #perceptual_loss = criterion_perceptual(out_f, gt)
 
-            loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
-
+            loss = 1 * criterion_pixelwise(out_fin[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_fin[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0])
+            
             loss.backward()  
             optimizer.step()
 
@@ -288,18 +305,22 @@ if __name__ == "__main__":
                     shadow = data['shadow_image']
                     shadow_free = data['shadow_free_image']
                     mask = data['shadow_mask']
-                    crop_coordinate = data['crop_coordinate']
+                    #crop_coordinate = data['crop_coordinate']
+                    cont_mask = data['contour_mask']
+                    #exp_img = data['exposed_image']
 
-                    inp = shadow.type(Tensor)
-                    gt = shadow_free.type(Tensor)
-                    mask = mask.type(Tensor)
-                    crop_coordinate = crop_coordinate.type(Tensor)
-
-                    gt = torch.clamp(gt, 0, 1)
+                    inp = shadow.type(Tensor).to(device)
+                    gt = shadow_free.type(Tensor).to(device)
+                    mask = mask.type(Tensor).to(device)
+                    #crop_coordinate = crop_coordinate.type(Tensor).to(device)
+                    cont_mask = cont_mask.type(Tensor).unsqueeze(1).to(device)
+                    #exp_img = exp_img.type(Tensor).to(device)
 
                     out_p = resnet(inp)
 
-                    #function to create image where shadow part is form resnet, non shadow part is form input.
+                    ##
+                    mask_exp = mask.expand(-1, 3, -1, -1)
+
                     R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     R_b_mat = torch.where(mask == 0., torch.tensor(0.0), out_p[:, 1].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
                     G_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 2].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -309,9 +330,18 @@ if __name__ == "__main__":
                     inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
                     innested_img = exposureRGB_Tens(inp, inp_g)
 
-                    #mask, _ = dilate_erode_mask(mask, 5) #allargo la mask di 5px per 
+                    penumbra_tens = torch.empty_like(mask)
+                    for i in range(mask.shape[0]):
+                        penumbra_mask = penumbra(mask[i])
+                        penumbra_tens[i, :, :, :] = penumbra_mask
+
+                    pen_mask = torch.clamp(mask + penumbra_tens, 0, 1)
+
+                    penumbra_tens_exp = penumbra_tens.expand(-1, 3, -1, -1) 
                     mask_exp = mask.expand(-1, 3, -1, -1)
-                    inp_u = torch.cat((innested_img, mask), dim = 1)
+                    pen_mask_exp = pen_mask_exp = pen_mask.expand(-1, 3, -1, -1)
+
+                    inp_u = torch.cat((innested_img, pen_mask), dim = 1) 
 
                     d_type = "cuda" if torch.cuda.is_available() else "cpu"
                     with torch.autocast(device_type=d_type):
@@ -319,32 +349,15 @@ if __name__ == "__main__":
 
                     out_f = exposure_3ch(innested_img, out_u)
 
-                    out_f = torch.clamp(out_f, 0, 1) #clippo per la loss
+                    out_fin = torch.where(pen_mask == 0, inp, out_f) #clippo per la loss
 
-                    ##LOSS PART
-                    l_crop = []
-                    for j in range(out_f.shape[0]):
-                        a = out_f[j].clone()
-                        b = gt[j].clone()
-                        m = mask_exp[j].clone()
-                        crop_img = a[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
-                        crop_gt = b[:, int(crop_coordinate[j][0]):int(crop_coordinate[j][1]), int(crop_coordinate[j][2]):int(crop_coordinate[j][3])]
-                        crop_img = crop_img.expand(1, -1, -1, -1)
-                        crop_gt = crop_gt.expand(1, -1, -1, -1)
-                        #lpips = criterion_perceptual(crop_img, crop_gt) ##Clamp
-                        loss_crop = criterion_pixelwise(crop_img, crop_gt)
-                        l_crop.append(loss_crop)
-                    c_loss = torch.stack(l_crop).mean()
+                    loss = 1 * criterion_pixelwise(out_fin[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_fin[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0])
+                    
+                    psnr = PSNR_(out_fin, gt)
+                    rmse = RMSE_(out_fin, gt)
 
-                    #perceptual_loss = criterion_perceptual(out_f, gt)
-
-                    loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * c_loss + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
-
-                    psnr = PSNR_(out_f, gt)
-                    rmse = RMSE_(out_f, gt)
-
-                    psnr_shadow = PSNR_(out_f*mask_exp, gt*mask_exp)
-                    rmse_shadow = RMSE_(out_f*mask_exp, gt*mask_exp)
+                    psnr_shadow = PSNR_(out_fin*mask_exp, gt*mask_exp)
+                    rmse_shadow = RMSE_(out_fin*mask_exp, gt*mask_exp)
                     
                     train_valid_epoch_loss += loss.detach().item()
 
@@ -356,12 +369,17 @@ if __name__ == "__main__":
                     pbar.update(val_dataset.__len__()/len(val_loader))
                 pbar.close()
 
-                if opt.save_images:# and (epoch == 1 or epoch % 10 == 0):
+                if opt.save_images and (epoch == 1 or epoch % 25 == 0):
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
+                        shadow = torch.clamp(shadow, 0, 1)
+                        innested_img = torch.clamp(innested_img, 0, 1)
+                        out_fin = torch.clamp(out_fin, 0, 1)
+                        gt = torch.clamp(gt, 0, 1)
+
                         im_input = (shadow[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_blur = (innested_img[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
-                        im_pred = (out_f[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+                        im_pred = (out_fin[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
                         im_gt = (gt[count].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
 
                         im_input = np.clip(im_input, 0, 255)

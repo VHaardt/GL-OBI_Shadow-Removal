@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.optim.lr_scheduler import MultiStepLR
-from dataloader import ISTDDataset
+from test_scripts.dataloader_old import ISTDDataset
 from models.ResNet import CustomResNet101, CustomResNet50
 from models.UNet import UNetTranslator_S, UNetTranslator
 from datetime import datetime
@@ -49,7 +49,8 @@ def parse_args():
     parser.add_argument("--decay_steps", type=int, default=4, help="number of step decays")
 
     parser.add_argument("--pixel_weight", type=float, default=1, help="weight of the pixelwise loss")
-    parser.add_argument("--perceptual_weight", type=float, default=0.2, help="weight of the perceptual loss")
+    parser.add_argument("--pixel_weight_pen", type=float, default=0.5, help="weight of the pixelwise loss")
+    parser.add_argument("--perceptual_weight", type=float, default=0.4, help="weight of the perceptual loss")
 
     parser.add_argument("--valid_checkpoint", type=int, default=1, help="number of epochs between each validation")
     parser.add_argument("--checkpoint_mode", type=str, default="b/l", help="mode for saving checkpoints: b/l (best/last), all (all epochs), n (none)")
@@ -241,15 +242,37 @@ if __name__ == "__main__":
             shadow_free = data['shadow_free_image']
             mask = data['shadow_mask']
             crop_coordinate = data['crop_coordinate']
-            exp_img = data['exposed_image']
+            #exp_img = data['exposed_image']
 
             inp = shadow.type(Tensor).to(device)
             gt = shadow_free.type(Tensor).to(device)
             mask = mask.type(Tensor).to(device)
             crop_coordinate = crop_coordinate.type(Tensor).to(device)
-            exp_img = exp_img.type(Tensor).to(device)
+            #exp_img = exp_img.type(Tensor).to(device)
 
-            #out_p = resnet(inp)
+            out_p = resnet(inp)
+
+            exposure_img = torch.zeros_like(inp)
+            for c in range(inp.shape[1]):
+                j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
+                inp_ch = inp[:, c, :, :]
+                mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                sd = torch.empty(inp.shape[0], device=device)
+                for b in range(inp.shape[0]):  
+                    inp_b = inp[b, c, :, :] 
+                    mask_b = mask[b, 0, :, :]  
+                    med = torch.mean(inp_b[mask_b == 1])
+                    mu[b] = med.item()
+                    stand = torch.std(inp_b[mask_b == 1])
+                    sd[b] = stand.item()
+                mu = mu.view(-1, 1, 1).to(device)
+                sd = sd.view(-1, 1, 1).to(device)
+                mu_t = out_p[:, j+1].view(-1, 1, 1).to(device)
+                sd_t = out_p[:, j].view(-1, 1, 1).to(device)
+                sd = torch.where(sd == 0, sd + 1e-5, sd)
+                exposed_img_ch = mu_t + (inp_ch - mu) * (sd_t / sd)
+                exposure_img[:, c, :, :] = exposed_img_ch
+            innested_img = torch.where(mask == 0., inp, exposure_img)
 
             ##
             '''R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -264,7 +287,7 @@ if __name__ == "__main__":
             #inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
             #innested_img = exposureRGB_Tens(inp, inp_g)
 
-            innested_img = torch.where(mask == 0., inp, exp_img)
+            #innested_img = torch.where(mask == 0., inp, exp_img)
 
             penumbra_tens = torch.empty_like(mask)
             for i in range(mask.shape[0]):
@@ -289,7 +312,7 @@ if __name__ == "__main__":
             out_f = torch.clamp(out_f, 0, 1)
             gt = torch.clamp(gt, 0, 1)
 
-            loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + 0.4 * criterion_perceptual(out_f, gt) 
+            loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + opt.pixel_weight_pen * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + opt.perceptual_weight * criterion_perceptual(out_f, gt) 
             #loss = criterion_pixelwise(out_f[pen_mask_exp != 0], gt[pen_mask_exp != 0])
 
             loss.backward()  
@@ -318,15 +341,37 @@ if __name__ == "__main__":
                     shadow_free = data['shadow_free_image']
                     mask = data['shadow_mask']
                     crop_coordinate = data['crop_coordinate']
-                    exp_img = data['exposed_image']
+                    #exp_img = data['exposed_image']
 
                     inp = shadow.type(Tensor).to(device)
                     gt = shadow_free.type(Tensor).to(device)
                     mask = mask.type(Tensor).to(device)
                     crop_coordinate = crop_coordinate.type(Tensor).to(device)
-                    exp_img = exp_img.type(Tensor).to(device)
+                    #exp_img = exp_img.type(Tensor).to(device)
 
-                    #out_p = resnet(inp)
+                    out_p = resnet(inp)
+
+                    exposure_img = torch.zeros_like(inp)
+                    for c in range(inp.shape[1]):
+                        j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
+                        inp_ch = inp[:, c, :, :]
+                        mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                        sd = torch.empty(inp.shape[0], device=device)
+                        for b in range(inp.shape[0]):  
+                            inp_b = inp[b, c, :, :] 
+                            mask_b = mask[b, 0, :, :]  
+                            med = torch.mean(inp_b[mask_b == 1])
+                            mu[b] = med.item()
+                            stand = torch.std(inp_b[mask_b == 1])
+                            sd[b] = stand.item()
+                        mu = mu.view(-1, 1, 1).to(device)
+                        sd = sd.view(-1, 1, 1).to(device)
+                        mu_t = out_p[:, j+1].view(-1, 1, 1).to(device)
+                        sd_t = out_p[:, j].view(-1, 1, 1).to(device)
+                        sd = torch.where(sd == 0, sd + 1e-5, sd)
+                        exposed_img_ch = mu_t + (inp_ch - mu) * (sd_t / sd)
+                        exposure_img[:, c, :, :] = exposed_img_ch
+                    innested_img = torch.where(mask == 0., inp, exposure_img)
 
                     ##
                     '''R_a_mat = torch.where(mask == 0., torch.tensor(1.0), out_p[:, 0].unsqueeze(1).unsqueeze(2).unsqueeze(3).repeat(1, 1, inp.size(2), inp.size(3)))
@@ -341,7 +386,7 @@ if __name__ == "__main__":
                     #inp_g = torch.cat((R_a_mat, R_b_mat, G_a_mat, G_b_mat, B_a_mat, B_b_mat), dim=1)
                     #innested_img = exposureRGB_Tens(inp, inp_g)
 
-                    innested_img = torch.where(mask == 0., inp, exp_img)
+                    #innested_img = torch.where(mask == 0., inp, exp_img)
 
                     penumbra_tens = torch.empty_like(mask)
                     for i in range(mask.shape[0]):
@@ -367,7 +412,7 @@ if __name__ == "__main__":
                     out_f = torch.clamp(out_f, 0, 1)
                     gt = torch.clamp(gt, 0, 1)
 
-                    loss = 1 * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + 0.5 * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + 0.4 * criterion_perceptual(out_f, gt) 
+                    loss = opt.pixel_weight * criterion_pixelwise(out_f[mask_exp != 0], gt[mask_exp != 0]) + opt.pixel_weight_pen * criterion_pixelwise(out_f[penumbra_tens_exp != 0], gt[penumbra_tens_exp != 0]) + opt.perceptual_weight * criterion_perceptual(out_f, gt)
                     #loss = criterion_pixelwise(out_f[pen_mask_exp != 0], gt[pen_mask_exp != 0])
 
                     ### METRICS ##########################################################################
@@ -425,7 +470,7 @@ if __name__ == "__main__":
                     pbar.update(val_dataset.__len__()/len(val_loader))
                 pbar.close()
 
-                if opt.save_images and (epoch == 1 or epoch % 50 == 0):
+                if opt.save_images:# and (epoch == 1 or epoch % 50 == 0):
                     os.makedirs(os.path.join(checkpoint_dir, "images"), exist_ok=True)
                     for count in range(len(shadow)):
                         shadow = torch.clamp(shadow, 0, 1)
