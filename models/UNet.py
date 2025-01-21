@@ -122,19 +122,19 @@ class UNetTranslator_S(nn.Module):
         self.out_channels = out_channels
         
         self.down1 = UNetCompress(in_channels, 64, kernel_size=4, normalize=False)
-        self.down2 = UNetCompress(64, 128)
-        self.down3 = UNetCompress(128, 256)
-        self.down4 = UNetCompress(256, 512, dropout=0.25)
+        self.down2 = UNetCompress(64, 128, dropout=0.1)
+        self.down3 = UNetCompress(128, 256, dropout=0.2)
+        self.down4 = UNetCompress(256, 512, dropout=0.3)
 
-        self.up1 = UNetDecompress(512, 256, deconv=deconv, dropout=0.25)
-        self.up2 = UNetDecompress(512, 128, deconv=deconv)
-        self.up3 = UNetDecompress(256, 64, deconv=deconv)
+        self.up1 = UNetDecompress(512, 256, deconv=deconv, dropout=0.3)
+        self.up2 = UNetDecompress(512, 128, deconv=deconv, dropout=0.2)
+        self.up3 = UNetDecompress(256, 64, deconv=deconv, dropout=0.1)
 
         self.final = nn.Sequential(
             nn.Upsample(scale_factor=2),
             nn.ZeroPad2d((1, 0, 1, 0)),
             nn.Conv2d(128, out_channels, 4, padding=1),
-            #nn.Tanh()
+            nn.BatchNorm2d(out_channels)  # Added Batch Normalization
         )
 
 
