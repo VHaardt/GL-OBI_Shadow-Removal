@@ -18,10 +18,6 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity as LPI
 import tqdm
 import cv2
 import json
-import requests
-from torchvision.transforms import v2
-
-import ipdb
 
 
 def parse_args():
@@ -387,6 +383,6 @@ if __name__ == "__main__":
         with open(os.path.join(checkpoint_dir, "metrics.json"), "w") as f:
             json.dump(metrics_dict, f)
 
-        torch.cuda.empty_cache()    #################
-
+        torch.cuda.empty_cache()
+        
     print("Training finished")

@@ -1,13 +1,11 @@
 import argparse
 import os
 import torch
-from test_scripts.dataloader_old import ISTDDataset, SRDDataset, WSRDDataset
+from dataloader import Dataset
 from models.UNet import UNetTranslator_S
-from models.ResNet import CustomResNet50
 from datetime import datetime
-from utils.metrics import PSNR, RMSE
-from utils.exposure import exposure_3ch, exposureRGB_Tens
-from utils.blurring import penumbra, dilate_erode_mask
+from utils.exposure import exposureRGB_Tens
+from utils.blurring import penumbra
 import numpy as np
 import random
 import tqdm
@@ -104,7 +102,7 @@ if __name__ == "__main__":
         mask_exp = mask.expand(-1, 3, -1, -1)
         pen_mask_exp = pen_mask_exp = pen_mask.expand(-1, 3, -1, -1)
 
-        inp_u = torch.cat((inp, mask, penumbra_tens), dim = 1) #tolta masckera messa mask+pen
+        inp_u = torch.cat((inp, mask, penumbra_tens), dim = 1)
 
         out_u = unet(inp_u)
 

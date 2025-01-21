@@ -3,7 +3,6 @@
 import argparse
 import os
 import torch
-import torch.nn.functional as F
 from torch.optim.lr_scheduler import MultiStepLR
 from dataloader import Dataset
 from models.UNet import UNetTranslator_S, UNetTranslator
@@ -18,7 +17,6 @@ from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity as LPI
 import tqdm
 import cv2
 import json
-import requests
 
 
 def parse_args():
@@ -72,18 +70,6 @@ def weights_init_normal(m):
     elif classname.find("BatchNorm2d") != -1:
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
-
-#Delete this in the final version
-def send_telegram_notification(message):
-    bot_token = '7363314579:AAF5x5LkQrKTk7zJjHh-s5SKUnOWMtitVxs'
-    chat_id = '5757693999'
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    payload = {
-        'chat_id': chat_id,
-        'text': message
-    }
-    response = requests.post(url, json=payload, verify=False)
-    return response.json()
 
 
 if __name__ == "__main__":
@@ -394,16 +380,6 @@ if __name__ == "__main__":
   
             print(f"[Valid Loss: {val_loss[-1]}]")
 
-        #remove in final version
-        if epoch == round(0.25 * opt.n_epochs):
-            send_telegram_notification(f"25% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :(")
-        elif epoch == round(0.5 * opt.n_epochs):
-            send_telegram_notification(f"50% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :|")
-        elif epoch == round(0.75 * opt.n_epochs):
-            send_telegram_notification(f"75% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :)")
-        elif (opt.n_epochs - epoch) == 10 and opt.n_epochs != 40:
-            send_telegram_notification(f"Only {opt.n_epochs - epoch} epochs remain. :))")
-
         # Save metrics to disk
         metrics_dict = {
             "train_loss_unet": train_loss,
@@ -434,6 +410,3 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
 
     print("Training finished")
-
-#Remove in the final version
-send_telegram_notification("Hey, Training process is complete!")    

@@ -9,16 +9,14 @@ from models.ResNet import CustomResNet101, CustomResNet50
 from models.UNet import UNetTranslator_S, UNetTranslator
 from datetime import datetime
 from utils.metrics import PSNR, RMSE
-from skimage.metrics import structural_similarity as SSIM_
-from utils.exposure import exposureRGB_Tens, exposure_3ch
-from utils.blurring import blur_image_border, dilate_erode_mask, penumbra
+from utils.exposure import exposureRGB_Tens
+from utils.blurring import dilate_erode_mask, penumbra
 import numpy as np
 import random
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity as LPIPS
 import tqdm
 import cv2
 import json
-import requests
 
 
 def parse_args():
@@ -75,19 +73,6 @@ def weights_init_normal(m):
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
 
-#Delete this in the final version
-def send_telegram_notification(message):
-    bot_token = '7363314579:AAF5x5LkQrKTk7zJjHh-s5SKUnOWMtitVxs'
-    chat_id = '5757693999'
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    payload = {
-        'chat_id': chat_id,
-        'text': message
-    }
-    response = requests.post(url, json=payload, verify=False)
-    return response.json()
-
-
 if __name__ == "__main__":
 
     opt = parse_args() # parse arguments
@@ -106,7 +91,7 @@ if __name__ == "__main__":
 
     # Define model
     if opt.unet_size == "S":
-        unet = UNetTranslator_S(in_channels=5, out_channels=6, deconv=False, local=0).to(device) #residual settato False
+        unet = UNetTranslator_S(in_channels=5, out_channels=6, deconv=False, local=0).to(device)
     else:
         unet = UNetTranslator(in_channels=5, out_channels=6, deconv=False, local=0).to(device)
     unet.apply(weights_init_normal)
@@ -198,7 +183,7 @@ if __name__ == "__main__":
 
 
     # =================================================================================== #
-    #                             1. Training UNet                                        #
+    #                             1. Training   G4L-OBI-NET                               #
     # =================================================================================== #
 
     for epoch in range(1, opt.n_epochs + 1):
@@ -227,7 +212,7 @@ if __name__ == "__main__":
             for c in range(inp.shape[1]):
                 j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
                 inp_ch = inp[:, c, :, :]
-                mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                mu = torch.empty(inp.shape[0], device=device)
                 sd = torch.empty(inp.shape[0], device=device)
                 for b in range(inp.shape[0]):  
                     inp_b = inp[b, c, :, :] 
@@ -239,7 +224,7 @@ if __name__ == "__main__":
                 mu = mu.view(-1, 1, 1).to(device)
                 sd = sd.view(-1, 1, 1).to(device)
 
-                mu_t = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                mu_t = torch.empty(inp.shape[0], device=device)
                 sd_t = torch.empty(inp.shape[0], device=device)
                 for b in range(inp.shape[0]):  
                     inp_b = inp[b, c, :, :] 
@@ -285,7 +270,7 @@ if __name__ == "__main__":
             mask_exp = mask.expand(-1, 3, -1, -1)
             pen_mask_exp = pen_mask_exp = pen_mask.expand(-1, 3, -1, -1)
 
-            inp_u = torch.cat((innested_img, mask, penumbra_tens), dim = 1) #tolta masckera messa mask+pen
+            inp_u = torch.cat((innested_img, mask, penumbra_tens), dim = 1)
 
             optimizer.zero_grad()
             out_u = unet(inp_u)
@@ -314,7 +299,7 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
 
         # =================================================================================== #
-        #                             2. Validation                                           #
+        #                             2. Validation    G4L-OBI-NET                            #
         # =================================================================================== #
         if (epoch) % opt.valid_checkpoint == 0 or epoch == 1:
             with torch.no_grad():
@@ -333,7 +318,7 @@ if __name__ == "__main__":
                     for c in range(inp.shape[1]):
                         j = 2 * c  # Calculate j values based on c (0, 2, 4 for j, and 1, 3, 5 for j+1)
                         inp_ch = inp[:, c, :, :]
-                        mu = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                        mu = torch.empty(inp.shape[0], device=device)
                         sd = torch.empty(inp.shape[0], device=device)
                         for b in range(inp.shape[0]):  
                             inp_b = inp[b, c, :, :] 
@@ -345,7 +330,7 @@ if __name__ == "__main__":
                         mu = mu.view(-1, 1, 1).to(device)
                         sd = sd.view(-1, 1, 1).to(device)
 
-                        mu_t = torch.empty(inp.shape[0], device=device) # Forma: [batch_size]
+                        mu_t = torch.empty(inp.shape[0], device=device)
                         sd_t = torch.empty(inp.shape[0], device=device)
                         for b in range(inp.shape[0]):  
                             inp_b = inp[b, c, :, :] 
@@ -391,7 +376,7 @@ if __name__ == "__main__":
                     mask_exp = mask.expand(-1, 3, -1, -1)
                     pen_mask_exp = pen_mask_exp = pen_mask.expand(-1, 3, -1, -1)
 
-                    inp_u = torch.cat((innested_img, mask, penumbra_tens), dim = 1) #tolta masckera messa mask+pen
+                    inp_u = torch.cat((innested_img, mask, penumbra_tens), dim = 1)
 
                     out_u = unet(inp_u)
 
@@ -476,17 +461,7 @@ if __name__ == "__main__":
                     if opt.checkpoint_mode == "all":
                         torch.save(unet.state_dict(), os.path.join(checkpoint_dir, "weights", f"epoch_{epoch}_unet_train.pth"))
 
-            print(f"[Valid Loss: {val_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]]")# [Valid MAE: {mae[-1]}] [Valid SSIM: {ssim[-1]}] [Valid LPIPS: {lpips[-1]}]]")
-
-        #remove in final version
-        if epoch == round(0.25 * opt.n_epochs):
-            send_telegram_notification(f"25% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :(")
-        elif epoch == round(0.5 * opt.n_epochs):
-            send_telegram_notification(f"50% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :|")
-        elif epoch == round(0.75 * opt.n_epochs):
-            send_telegram_notification(f"75% of training is complete, still {opt.n_epochs - epoch} epochs remaining. :)")
-        elif (opt.n_epochs - epoch) == 10 and opt.n_epochs != 40:
-            send_telegram_notification(f"Only {opt.n_epochs - epoch} epochs remain. :))")
+            print(f"[Valid Loss: {val_loss[-1]}] [Valid RMSE: {val_rmse[-1]}] [Valid PSNR: {val_psnr[-1]}]]")
 
         # Save metrics to disk
         metrics_dict = {
@@ -508,6 +483,3 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
 
     print("Training finished")
-
-#Remove in the final version
-send_telegram_notification("Hey, Training process is complete!")    
