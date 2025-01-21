@@ -1,8 +1,3 @@
-'''
-This section want to test the theory limit of pre training part and the epoch necessary to reach it.
-So it will be train and tested on the same dataset.
-'''
-
 import argparse
 import os
 import torch
