@@ -48,17 +48,17 @@ Please download the corresponding pretrained model and modify:
 ## Test
 You can directly test the performance of the pre-trained models as follows
 1. Modify the paths to dataset and pre-trained model. You need to modify the following path:
-    For `GOINet_test.py` and `LOBINet_test.py`:
-    ```python
-    dataset_path
-    model_path
-    ```
-    For `G4LOBINet_test.py`:
-    ```python
-    global_model_patht
-    local_model_path
-    model_path
-    ```
+  - For `GOINet_test.py` and `LOBINet_test.py`:
+      ```python
+      dataset_path
+      model_path
+      ```
+  - For `G4LOBINet_test.py`:
+      ```python
+      global_model_patht
+      local_model_path
+      model_path
+      ```
 2. Test the models
 ```python
 python GOINet_test.py --save_images True
