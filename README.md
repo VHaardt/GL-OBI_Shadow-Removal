@@ -40,20 +40,36 @@ pip install -r requirements.txt
 ## Pretrained models
 [ISTD](-) | [ISTD+](-) | [SRD](-)
 
-Please download the corresponding pretrained model and modify the `weights` in `test.py`.
-
+Please download the corresponding pretrained model and modify:
+- `model_path` option in `GOINet_test.py`.
+- `model_path` option in `LOBINet_test.py`.
+- `global_model_patht` and `local_model_path` options in `G4LOBINet_test.py`.
+  
 ## Test
-You can directly test the performance of the pre-trained model as follows
-1. Modify the paths to dataset and pre-trained model. You need to modify the following path in the `test.py` 
+You can directly test the performance of the pre-trained models as follows
+1. Modify the paths to dataset and pre-trained model. You need to modify the following path:
+    For `GOINet_test.py` and `LOBINet_test.py`:
+    ```python
+    dataset_path
+    model_path
+    ```
+    For `G4LOBINet_test.py`:
+    ```python
+    global_model_patht
+    local_model_path
+    model_path
+    ```
+2. Test the models
 ```python
-input_dir # shadow image input path -- Line 27
-weights # pretrained model path -- Line 31
+python GOINet_test.py --save_images True
 ```
-2. Test the model
 ```python
-python test.py --save_images
+python LOBINet_test.py --save_images True
 ```
-You can check the output in `./results`.
+```python
+python G4LOBINet_test.py --save_images True
+```
+You can check the output in `./output`.
 
 ## Train
 1. Download datasets and set the following structure
@@ -68,24 +84,39 @@ You can check the output in `./results`.
         |-- test_B # shadow mask
         |-- test_C # shadow-free GT
 ```
-2. You need to modify the following terms in `option.py`
+2. You need to modify the following terms in `GOINet.py`, `LOBINet.py` and `G4LOBINet.py` based on wich model you want to train.
 ```python
-train_dir  # training set path
-val_dir   # testing set path
-gpu: 0 # Our model can be trained using a single RTX A5000 GPU. You can also train the model using multiple GPUs by adding more GPU ids in it.
+dataset_path # path to the dataset root
+gpu: 0 # GPU id to use for training, -1 for CPU
 ```
 3. Train the network
 If you want to train the network on 256X256 images:
 ```python
-python train.py --warmup --win_size 8 --train_ps 256
+python GOINet.py --img_height 256 --img_width 256
+```
+```python
+python LOBINet.py --img_height 256 --img_width 256
+```
+```python
+python G4LOBINet.py --img_height 256 --img_width 256
 ```
 or you want to train on original resolution, e.g., 480X640 for ISTD:
 ```python
-python train.py --warmup --win_size 10 --train_ps 320
+python GOINet.py --img_height 640 --img_width 480
+```
+```python
+python LOBINet.py --img_height 640 --img_width 480
+```
+```python
+python G4LOBINet.py --img_height 640 --img_width 480
 ```
 
 ## Evaluation
-The results reported in the paper are calculated by the `matlab` script. Details refer to `evaluation/measure_shadow.m`.
+The results reported in the paper are calculated by the `matlab` script. Details refer to:
+- `eval/measure_shadow.m`: images are resized 256x256 and the standard way of evaluating is used
+- `eval/measure_shadow_orig.m`: images are not resized and the standard way of evaluating is used
+- `eval/measure_shadow_true.m`: images are resized 256x256 and the proposed new way of evaluating is used
+- `eval/measure_shadow_true_orig.m`: images are not resized and the proposed new way of evaluating is used
 
 ## Results
 #### Quantitative comparison with state-of-the-art methods on ISTD+, using the standard way of calculating the evaluation metrics.
