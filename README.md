@@ -9,16 +9,16 @@ The models operate at different levels:
 - **G-OI-Net** is a fast and efficient shadow removal solution. This method is designed to extract three global re-illumination parameters, one for each RGB channel, optimized to achieve the best overexposure effect. The overexposed image, combined with an inpainting process in the shadow-affected areas, yields the final shadow-free result. Furthermore, G-OI-Net introduced a pre-overexposure stage, where the input shadow region
 is normalized and re-illuminated using parameters derived from the shadow contour region.
 
-<p align=center><img width="80%" src="IMG/GOINET.pdf"/></p>
+<p align=center><img width="80%" src="IMG/GOINET.png"/></p>
 
 - **L-OBI-Net**, is a more complex U-Net-based solution aimed at achieving optimal shadow removal while maintaining efficiency. This method integrates boundary awareness, which significantly improves shadow removal results and reduces ghosting effects. In addition to the shadow-affected image and corresponding shadow mask, the model also requires a penumbra region mask as input, enabling a focus on this critical transition area. This focus is further reinforced in the loss function. The network predicts pixel-wise re-illumination kernels, applied to the shadow image to generate the overexposed image. The final shadow-free image is obtained by merging the original non-shadow regions with the over-
 exposed shadow regions through an inpainting process. This ensures smooth transitions in the penumbra region, achieving effective shadow removal.
 
-<p align=center><img width="80%" src="IMG/LOBINET.pdf"/></p>
+<p align=center><img width="80%" src="IMG/LOBINET.png"/></p>
 
 - **G4L-OBI-Net**, was conceptualized to implement a global step as a preliminary stage for local refinement. However, this solution did not achieve the desired results. In this method, the input shadow image undergoes a global overexposure step as an initial approximation of shadow removal, brightening the shadowed areas uniformly. This is followed by a pixel-wise local refinement stage, where each pixel in the shadow region is adjusted using locally derived parameters.
 
-<p align=center><img width="80%" src="IMG/G4LOBINET.pdf"/></p>
+<p align=center><img width="80%" src="IMG/G4LOBINET.png"/></p>
 
 Additionally, we identified and critiqued a common issue in evaluating shadow removal performance across different regions of an image (shadow region, non-shadow region, and entire image). We highlighted how the conventional application of shadow masks distorts results, making it impossible to compare performance across different areas of the same image or dataset. We proposed a solution that evaluates only the relevant pixels or areas, yielding meaningful numerical results that enable a fair comparison of how shadow removal methods perform in shadow and non-shadow regions.
 
@@ -140,7 +140,7 @@ The evaluation results are as follows
 <p align=center><img width="80%" src="IMG/speed.png"/></p>
 
 #### Visual Results
-<p align=center><img width="80%" src="doc/res.jpg"/></p>
+<p align=center><img width="80%" src="IMG/visual.png"/></p>
 
 #### Testing results
 The testing results on dataset ISTD, ISTD+, SRD are: [results](-)
