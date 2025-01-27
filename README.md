@@ -140,7 +140,7 @@ The evaluation results are as follows
 <p align=center><img width="80%" src="IMG/speed.png"/></p>
 
 #### Visual Results
-<p align=center><img width="80%" src="IMG/visual.png"/></p>
+<p align=center><img width="100%" src="IMG/visual.png"/></p>
 
 #### Testing results
 The testing results on dataset ISTD, ISTD+, SRD are: [results](-)
