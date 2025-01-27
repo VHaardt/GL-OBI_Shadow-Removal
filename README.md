@@ -88,8 +88,8 @@ python train.py --warmup --win_size 10 --train_ps 320
 The results reported in the paper are calculated by the `matlab` script. Details refer to `evaluation/measure_shadow.m`. ...
 
 ## Results
-#### Evaluation on ISTD+ with traditional way of caluclating evaluation metrics
-The evaluation results on ISTD+ are as follows
+#### Quantitative comparison with state-of-the-art methods on ISTD+, using the standard way of calculating the evaluation metrics.
+The evaluation results are as follows
 
 | **Method**                 | **PSNR (S) ↑** | **SSIM (S) ↑** | **MAE (S) ↓** | **PSNR (NS) ↑** | **SSIM (NS) ↑** | **MAE (NS) ↓** | **PSNR (ALL) ↑** | **SSIM (ALL) ↑** | **MAE (ALL) ↓** |
 |----------------------------|----------------|----------------|---------------|-----------------|-----------------|----------------|------------------|------------------|-----------------|
@@ -104,11 +104,10 @@ The evaluation results on ISTD+ are as follows
 | **G4L-OBI-Net**            | 35.60          | 0.9817         | 7.84          | 34.35           | 0.9558          | 3.30           | 31.29            | 0.9335           | 1.32            |  
 
 
-#### Evaluation on ISTD, ISTD+, and SRD, with traditional way of caluclating evaluation metrics
+#### Quantitative comparison with state-of-the-art methods on ISTD, ISTD+ and SRD datasets, using the proposed way of calculating the evaluation metrics.
+The evaluation results are as follows
 
-| Dataset    | Method                          | PSNR↑  | SSIM↑    | MAE↓    | PSNR↑  | SSIM↑    | MAE↓    | PSNR↑  | SSIM↑    | MAE↓    |
-|------------|---------------------------------|--------|----------|---------|--------|----------|---------|--------|----------|---------|
-|            |                                 | **S**  | **S**    | **S**   | **NS** | **NS**   | **NS**  | **ALL**| **ALL**  | **ALL** |
+|**Dataset** | **Method**                 | **PSNR (S) ↑** | **SSIM (S) ↑** | **MAE (S) ↓** | **PSNR (NS) ↑** | **SSIM (NS) ↑** | **MAE (NS) ↓** | **PSNR (ALL) ↑** | **SSIM (ALL) ↑** | **MAE (ALL) ↓** |
 |------------|---------------------------------|--------|----------|---------|--------|----------|---------|--------|----------|---------|
 | **ISTD**   | Input Image                    | 13.35  | 0.6832   | 33.60   | 25.67  | 0.9230   | 7.59    | 20.33  | 0.8742   | 3.78    |
 |            | DHAN \citep{cun2020towards}    | 25.79  | 0.8695   | 8.43    | 28.76  | 0.9215   | 5.92    | 27.88  | 0.9215   | 2.10    |
@@ -119,7 +118,6 @@ The evaluation results on ISTD+ are as follows
 |            | **G-OI-Net**                   | 21.75  | 0.8051   | 13.74   | 25.64  | 0.9228   | 7.59    | 24.71  | 0.9084   | 2.77    |
 |            | **L-OBI-Net**                  | 23.74  | 0.8690   | 9.68    | 25.64  | 0.9243   | 7.64    | 25.22  | 0.9264   | 2.61    |
 |            | **G4L-OBI-Net**                | 23.48  | 0.8478   | 10.40   | 25.67  | 0.9241   | 7.62    | 25.20  | 0.9223   | 2.63    |
-|------------|---------------------------------|--------|----------|---------|--------|----------|---------|--------|----------|---------|
 | **ISTD+**  | Input Image                    | 11.81  | 0.6624   | 38.53   | 33.11  | 0.9322   | 3.33    | 20.22  | 0.8748   | 3.05    |
 |            | DHAN \citep{cun2020towards}    | 23.46  | 0.8759   | 10.17   | 25.44  | 0.9239   | 7.90    | 24.86  | 0.9244   | 2.75    |
 |            | SG-ShadowNet                   | 26.96  | 0.8655   | 7.27    | 31.98  | 0.9284   | 3.79    | 30.50  | 0.9305   | 1.43    |
@@ -129,7 +127,6 @@ The evaluation results on ISTD+ are as follows
 |            | **G-OI-Net**                   | 24.77  | 0.8162   | 11.13   | 33.03  | 0.9320   | 3.34    | 30.23  | 0.9199   | 1.46    |
 |            | **L-OBI-Net**                  | 27.49  | 0.8828   | 6.90    | 33.64  | 0.9337   | 3.30    | 31.69  | 0.9380   | 1.28    |
 |            | **G4L-OBI-Net**                | 26.61  | 0.8568   | 7.84    | 33.57  | 0.9336   | 3.30    | 31.29  | 0.9335   | 1.32    |
-|------------|---------------------------------|--------|----------|---------|--------|----------|---------|--------|----------|---------|
 | **SRD**    | Input Image                    | 11.53  | 0.5737   | 39.27   | 27.40  | 0.8933   | 5.43    | 17.92  | 0.8124   | 4.77    |
 |            | SG-ShadowNet                   | 24.90  | 0.7852   | 8.10    | 31.34  | 0.8982   | 4.05    | 28.91  | 0.9215   | 1.68    |
 |            | BMNet \citep{zhu2022bijective} | 26.13  | 0.8193   | 7.51    | 31.80  | 0.9103   | 4.00    | 29.56  | 0.9325   | 1.63    |
