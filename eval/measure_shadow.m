@@ -48,8 +48,8 @@ for i=1:length(SD)
     m=imresize(m,[256 256]);
 %     
 
-    nmask=~m;       %mask of non-shadow region|非阴影区域的mask
-    smask=~nmask;   %mask of shadow regions|阴影区域的mask
+    nmask=~m;       %mask of non-shadow region|闈為槾褰卞尯鍩熺殑mask
+    smask=~nmask;   %mask of shadow regions|闃村奖鍖哄煙鐨刴ask
 %     avg_s = mean(mean(mean(s)));
 %     avg_f = mean(mean(mean(f)));
 %     s = s.*avg_f ./avg_s;
