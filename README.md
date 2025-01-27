@@ -136,33 +136,12 @@ The evaluation results are as follows
 |            | **L-OBI-Net**                  | 24.02  | 0.7919   | 9.50    | 29.22  | 0.8972   | 4.98    | 27.33  | 0.9147   | 2.05    |
 |            | **G4L-OBI-Net**                | 23.50  | 0.7826   | 10.31   | 29.14  | 0.8967   | 5.00    | 27.06  | 0.9115   | 2.11    |
 
+####  The PSNR performance, v.s., the number of generated images per second, of state-of-the-art available shadow methods on ISTD+ test set resized to 256x256
+<p align=center><img width="80%" src="doc/res.jpg"/></p>
 
 #### Visual Results
 <p align=center><img width="80%" src="doc/res.jpg"/></p>
 
 #### Testing results
-The testing results on dataset ISTD, ISTD+, SRD are: [results](https://drive.google.com/file/d/1zcv7KBCIKgk-CGQJCWnM2YAKcSAj8Sc4/view?usp=share_link)
+The testing results on dataset ISTD, ISTD+, SRD are: [results](-)
 
-## References
-Our implementation is based on [Uformer](https://github.com/ZhendongWang6/Uformer) and [Restormer](https://github.com/swz30/Restormer). We would like to thank them.
-
-Citation
------
-Preprint available [here](https://arxiv.org/pdf/2302.01650.pdf). 
-
-In case of use, please cite our publication:
-
-L. Guo, S. Huang, D. Liu, H. Cheng and B. Wen, "ShadowFormer: Global Context Helps Image Shadow Removal," AAAI 2023.
-
-Bibtex:
-```
-@article{guo2023shadowformer,
-  title={ShadowFormer: Global Context Helps Image Shadow Removal},
-  author={Guo, Lanqing and Huang, Siyu and Liu, Ding and Cheng, Hao and Wen, Bihan},
-  journal={arXiv preprint arXiv:2302.01650},
-  year={2023}
-}
-```
-
-## Contact
-If you have any questions, please contact lanqing001@e.ntu.edu.sg
