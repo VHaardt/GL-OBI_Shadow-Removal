@@ -25,9 +25,9 @@ Additionally, we identified and critiqued a common issue in evaluating shadow re
 For more details, please refer to our [original work](-)
 
 ## Requirement
-* Python 3.7
-* Pytorch 1.7
-* CUDA 11.1
+* Python 3.9
+* Pytorch 2.4
+* CUDA 12.4
 ```bash
 pip install -r requirements.txt
 ```
@@ -92,23 +92,23 @@ gpu: 0 # GPU id to use for training, -1 for CPU
 3. Train the network
 If you want to train the network on 256X256 images:
 ```python
-python GOINet.py --dataset_path /User/scr/ISTD_Data --img_height 256 --img_width 256
+python GOINet.py --dataset_path /path/to/dataset --img_height 256 --img_width 256
 ```
 ```python
-python LOBINet.py --dataset_path /User/scr/ISTD_Data --img_height 256 --img_width 256
+python LOBINet.py --dataset_path /path/to/dataset --img_height 256 --img_width 256
 ```
 ```python
-python G4LOBINet.py --dataset_path /User/scr/ISTD_Data --img_height 256 --img_width 256
+python G4LOBINet.py --dataset_path /path/to/dataset --img_height 256 --img_width 256
 ```
 or you want to train on original resolution, e.g., 480X640:
 ```python
-python GOINet.py --dataset_path /User/scr/ISTD_Data --img_height 640 --img_width 480
+python GOINet.py --dataset_path /path/to/dataset --img_height 640 --img_width 480
 ```
 ```python
-python LOBINet.py --dataset_path /User/scr/ISTD_Data --img_height 640 --img_width 480
+python LOBINet.py --dataset_path /path/to/dataset --img_height 640 --img_width 480
 ```
 ```python
-python G4LOBINet.py --dataset_path /User/scr/ISTD_Data --img_height 640 --img_width 480
+python G4LOBINet.py --dataset_path /path/to/dataset --img_height 640 --img_width 480
 ```
 
 ## Evaluation
