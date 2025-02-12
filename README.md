@@ -33,12 +33,14 @@ pip install -r requirements.txt
 ```
 
 ## Datasets
-* ISTD [[link]](https://github.com/DeepInsight-PCALab/ST-CGAN)  
-* ISTD+ [[link]](https://github.com/cvlab-stonybrook/SID)
+* ISTD [[Training/Testing]](https://github.com/DeepInsight-PCALab/ST-CGAN)  
+* ISTD+ [[Training/Testing]](https://github.com/cvlab-stonybrook/SID)
 * SRD [[Training]](https://drive.google.com/file/d/1W8vBRJYDG9imMgr9I2XaA13tlFIEHOjS/view)[[Testing]](https://drive.google.com/file/d/1GTi4BmQ0SJ7diDMmf-b7x2VismmXtfTo/view)
 
 ## Pretrained models
-[ISTD](-) | [ISTD+](-) | [SRD](-)
+* G-OI-Net: [ISTD](https://drive.google.com/drive/folders/1DznywJKvvpaTMRIMHwx1fTc_BMHAW81G?usp=share_link) | [ISTD+](https://drive.google.com/drive/folders/1pmrcCQI_0Y5fZd2XGZx67PNokDXr1wWw?usp=share_link) | [SRD](https://drive.google.com/drive/folders/1TfDOax2sP0SW3k4SpbNggSlLLDGC3df1?usp=share_link)
+* L-OBI-Net: [ISTD](https://drive.google.com/drive/folders/1ynFZPF7IpczbNlCFqGe9e_hrnz8o5_eW?usp=share_link) | [ISTD+](https://drive.google.com/drive/folders/1rieRLry1p2c2KsMvErd6DnVSghxTyRdx?usp=share_link) | [SRD](https://drive.google.com/drive/folders/1w9fR-yj0eBVqh6fzjLiZpm-DulreTb-V?usp=share_link)
+* G4L-OBI-Net: [ISTD](https://drive.google.com/drive/folders/1ogxrbmhJ1RS2R3LuPFBCOzBd--rHdZYY?usp=share_link) | [ISTD+](https://drive.google.com/drive/folders/13v6OVOGmNnWUKBCz3gqUQpFUmwG09nQ0?usp=share_link) | [SRD](https://drive.google.com/drive/folders/1F9-MUW1Nn0EYQL_JthIQ4h-_H6o6py3D?usp=share_link)
 
 Please download the corresponding pretrained model and modify:
 - `model_path` option in `GOINet_test.py`.
