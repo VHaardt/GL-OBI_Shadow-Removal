@@ -1,5 +1,5 @@
 # Global and Local Re-Illumination Methods for Efficient Single Image Shadow Removal
-This is the official implementation of the thesis [Global and Local Re-Illumination Methods for Efficient Single Image Shadow Removal](-).
+This is the official implementation of the thesis [Global and Local Re-Illumination Methods for Efficient Single Image Shadow Removal](https://drive.google.com/file/d/1U2l2CIaX9huE6dkBZgTFf_CRQaR6x3m-/view?usp=share_link).
 
 ## Introduction
 To tackle image shadow removal problem, we propose three novel re-illumination-based methods for single-image shadow removal: G-OI-Net, L-OBI-Net, and G4L-OBI-Net. Being re-illumination-based these methods focus on re-illumination parameter estimation rather than generating entirely new pixel values, which simplifies the overall system and reduces the risk of introducing artifacts. These convolutional neural network frameworks generate overexposed images to effectively address shadowed regions, leveraging the shadow boundary region (penumbra) as a key focus area due to its complexity. The proposed methods restore shadowed areas by inpainting overex-posed regions with the original shadowed image, ensuring the preservation of non-shadowed areas. 
@@ -22,7 +22,7 @@ exposed shadow regions through an inpainting process. This ensures smooth transi
 
 Additionally, we identified and critiqued a common issue in evaluating shadow removal performance across different regions of an image (shadow region, non-shadow region, and entire image). We highlighted how the conventional application of shadow masks distorts results, making it impossible to compare performance across different areas of the same image or dataset. We proposed a solution that evaluates only the relevant pixels or areas, yielding meaningful numerical results that enable a fair comparison of how shadow removal methods perform in shadow and non-shadow regions.
 
-For more details, please refer to our [original work](-)
+For more details, please refer to our [original work](https://drive.google.com/file/d/1U2l2CIaX9huE6dkBZgTFf_CRQaR6x3m-/view?usp=share_link)
 
 ## Requirement
 * Python 3.9
