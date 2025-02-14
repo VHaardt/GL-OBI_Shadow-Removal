@@ -176,5 +176,5 @@ The evaluation results are as follows
 <p align=center><img width="100%" src="IMG/visual.png"/></p>
 
 #### Testing results
-The testing results on dataset ISTD, ISTD+, SRD are: [results](-)
+L-OBI-Net testing results are: [ISTD](https://drive.google.com/drive/folders/1qQ6frZluPnBdJ3O2WVn-5UDrCDBfceBS?usp=share_link)|[ISTD+](https://drive.google.com/drive/folders/1JR2FCbj87AZ8SvAvzyIIqV_hidf3jTCi?usp=share_link)|[SRD](https://drive.google.com/drive/folders/1GDdmD9QmZmI7KRS_xF2LhSwhFp_Uf1ld?usp=share_link)
 
